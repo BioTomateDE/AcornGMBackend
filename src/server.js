@@ -31,18 +31,19 @@ function removeExpiredCallbackCodes() {
 
 
 function handleGetRoot(req, res) {
-  res.send("Index Page is not set up yet. Please go to <pre>/login.html</pre>.");
+  res.send("Index Page is not set up yet. Please go to <code>/login.html</code>.");
 }
 
 
 function handleGetRedirected(req, res, next) {
   if (req.query.code === undefined) {
-    res.send("Login failed: You do not have a return code! Please try logging in at <pre>login.html</pre>.");
+    res.send("Login failed: You do not have a return code! Please try logging in at <code>login.html</code>.");
     return;
   }
 
   let parts = req.url.split("/");
   let tempLoginToken = parts[parts.length - 1];
+
   if (!(typeof tempLoginToken === 'string')) {
     res.send("Invalid Temp Login Token in Redirect URL!");
     return;
@@ -81,7 +82,7 @@ app.get("/auth_config.json", (req, res) => {
 
 // enforce on upload mod
 app.get("/", handleGetRoot);
-app.get("/redirected/*", handleGetRedirected);
+app.get("/redirected/:test", handleGetRedirected);
 app.post("/upload/mod", jwtCheck);
 app.get("/check_callback", handleCheckCallback);
 app.use(express.static(frontendDir));
@@ -89,6 +90,7 @@ app.use(express.static(frontendDir));
 app.get('/authorized', function (req, res) {
     res.send('Secured Resource');
 });
+
 
 app.listen(port);
 
