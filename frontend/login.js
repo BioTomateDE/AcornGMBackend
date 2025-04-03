@@ -7,8 +7,8 @@ const configureClient = async () => {
     const config = await response.json();
 
     auth0Client = await auth0.createAuth0Client({
-      domain: config.domain,
-      clientId: config.clientId
+        domain: config.domain,
+        clientId: config.clientId
     });
 };
 
@@ -24,10 +24,17 @@ const updateUI = async () => {
 
 
 const login = async () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tempLoginToken = urlParams.get('tempLoginToken');
+    if (!(typeof tempLoginToken === 'string')) {
+        alert("Could not log in: Temporary login token is not set!\nThis shouldn't happen if you were redirected by the AcornGM program.");
+        return;
+    }
+
     await auth0Client.loginWithRedirect({
-      authorizationParams: {
-        redirect_uri: new URL("./redirected", window.location.origin)
-      }
+        authorizationParams: {
+            redirect_uri: new URL(`./redirected/${tempLoginToken}`, window.location.origin)
+        }
     });
 };
 
