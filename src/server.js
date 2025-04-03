@@ -13,12 +13,77 @@ const jwtCheck = auth({
 });
 
 
+const CallbackCode = class {
+  constructor(code, tempLoginToken) {
+    this.code = code;
+    this.tempLoginToken = tempLoginToken;
+    this.expiration = new Date(new Date().getTime() + 5*60*1000);
+  }
+}
+
+
+let callbackCodes = [];
+
+function removeExpiredCallbackCodes() {
+  let now = new Date();
+  callbackCodes = callbackCodes.filter(callbackCode => {now < callbackCode.expiration});
+}
+
+
+function handleGetRoot(req, res) {
+  res.send("Index Page is not set up yet. Please go to <pre>/login.html</pre>.");
+}
+
+
+function handleGetRedirected(req, res, next) {
+  if (req.query.code === undefined) {
+    res.send("Login failed: You do not have a return code! Please try logging in at <pre>login.html</pre>.");
+    return;
+  }
+
+  let parts = req.url.split("/");
+  let tempLoginToken = parts[parts.length - 1];
+  if (!(typeof tempLoginToken === 'string')) {
+    res.send("Invalid Temp Login Token in Redirect URL!");
+    return;
+  }
+
+  let callbackCode = new CallbackCode(req.query.code, tempLoginToken);
+
+  removeExpiredCallbackCodes();
+  callbackCodes.push(callbackCode);
+  res.send("<h1>Login Successful!</h1><p>You can safely close this tab and return to the AcornGM program.</p>");
+}
+
+
+function handleCheckCallback(req, res) {
+  let tempLoginToken = req.query.tempLoginToken;
+  if (!(typeof tempLoginToken === 'string')) {
+    res.send("Invalid Temp Login Token in Query!");
+    return;
+  }
+  removeExpiredCallbackCodes();
+
+  for (let i = 0; i < callbackCodes.length; i++) {
+    if (callbackCodes[i].tempLoginToken == tempLoginToken) {
+      res.send(callbackCodes[i].code);
+      return;
+    }
+  }
+
+  res.send("no");
+}
+
+
 app.get("/auth_config.json", (req, res) => {
   res.sendFile(path.join(frontendDir, "auth_config.json"));
 });
 
 // enforce on upload mod
+app.get("/", handleGetRoot);
+app.get("/redirected/*", handleGetRedirected);
 app.post("/upload/mod", jwtCheck);
+app.get("/check_callback", handleCheckCallback);
 app.use(express.static(frontendDir));
 
 app.get('/authorized', function (req, res) {
