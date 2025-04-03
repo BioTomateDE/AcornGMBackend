@@ -1,0 +1,12 @@
+.hidden {
+    display: none;
+}
+
+label {
+    margin-bottom: 10px;
+    display: block;
+}
+
+* {
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+}
