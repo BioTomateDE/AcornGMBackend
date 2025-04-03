@@ -15,8 +15,8 @@ const configureClient = async () => {
 
 const updateUI = async () => {
     const isAuthenticated = await auth0Client.isAuthenticated();
-    let token = await auth0Client.getTokenSilently();
-    alert(token)
+    // let token = await auth0Client.getTokenSilently();
+    // alert(token)
   
     document.getElementById("btn-logout").disabled = !isAuthenticated;
     document.getElementById("btn-login").disabled = isAuthenticated;
