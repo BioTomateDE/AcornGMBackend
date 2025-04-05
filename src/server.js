@@ -66,6 +66,8 @@ function handleCheckCallback(req, res) {
   }
   removeExpiredCallbackCodes();
 
+  console.log(tempLoginToken, callbackCodes);
+
   for (let i = 0; i < callbackCodes.length; i++) {
     if (callbackCodes[i].tempLoginToken == tempLoginToken) {
       res.send(callbackCodes[i].code);
