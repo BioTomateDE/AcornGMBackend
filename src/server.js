@@ -27,7 +27,7 @@ let callbackCodes = [];
 function removeExpiredCallbackCodes() {
   let oldLength = callbackCodes.length;
   let now = new Date();
-  callbackCodes = callbackCodes.filter(callbackCode => {now > callbackCode.expiration});
+  callbackCodes = callbackCodes.filter(callbackCode => {now < callbackCode.expiration});
   let newLength = callbackCodes.length;
   console.log(`Removed expired callback codes: ${oldLength} -> ${newLength}`);
 }
@@ -55,7 +55,7 @@ function handleGetRedirected(req, res, next) {
 
   let callbackCode = new CallbackCode(req.query.code, tempLoginToken);
 
-  removeExpiredCallbackCodes();
+  // removeExpiredCallbackCodes();
   callbackCodes.push(callbackCode);
   console.log(tempLoginToken, callbackCodes, callbackCodes.length);
   res.send("<h1>Login Successful!</h1><p>You can safely close this tab and return to the AcornGM program.</p>");
@@ -68,7 +68,7 @@ function handleCheckCallback(req, res) {
     res.send("Invalid Temp Login Token in Query!");
     return;
   }
-  removeExpiredCallbackCodes();
+  // removeExpiredCallbackCodes();
 
   console.log(tempLoginToken, callbackCodes, callbackCodes.length);
 
