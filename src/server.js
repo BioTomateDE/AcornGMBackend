@@ -13,16 +13,16 @@ const jwtCheck = auth({
 });
 
 
-const CallbackCode = class {
-  constructor(code, tempLoginToken) {
-    this.code = code;
+const CallbackToken = class {
+  constructor(accessToken, tempLoginToken) {
+    this.accessToken = accessToken;
     this.tempLoginToken = tempLoginToken;
     this.expiration = new Date(new Date().getTime() + 5*60*1000);
   }
 }
 
 
-function removeExpiredCallbackCodes() {
+function removeExpiredCallbackTokens() {
   let oldLength = callbackCodes.length;
   let now = new Date();
   callbackCodes = callbackCodes.filter(callbackCode => now < callbackCode.expiration);
@@ -39,7 +39,7 @@ function handleGetRoot(req, res) {
 }
 
 
-function handleGetRedirected(req, res, next) {
+async function handleGetRedirected(req, res, next) {
   if (req.query.code === undefined) {
     res.send("Login failed: You do not have a return code! Please try logging in at <code>login.html</code>.");
     return;
@@ -51,8 +51,14 @@ function handleGetRedirected(req, res, next) {
     return;
   }
 
-  let callbackCode = new CallbackCode(req.query.code, tempLoginToken);
-  removeExpiredCallbackCodes();
+  let token = await convertAuthCodeToToken(req.query.code);
+  if (token === null) {
+    res.send("<h1>Login failed!</h1><p>Could not get access token from Auth0!</p>");
+    return;
+  }
+  
+  let callbackCode = new CallbackToken(token, tempLoginToken);
+  removeExpiredCallbackTokens();
   callbackCodes.push(callbackCode);
   
   console.log(`Created callback code ${callbackCode} for temporary login ${tempLoginToken} (now ${callbackCodes.length}).`);
@@ -66,7 +72,7 @@ function handleCheckCallback(req, res) {
     res.send("Invalid Temp Login Token in Query!");
     return;
   }
-  removeExpiredCallbackCodes();
+  removeExpiredCallbackTokens();
 
   console.log(tempLoginToken, callbackCodes, callbackCodes.length);
 
@@ -78,6 +84,32 @@ function handleCheckCallback(req, res) {
   }
 
   res.send("no");
+}
+
+
+async function convertAuthCodeToToken(authCode) {
+  let options = {
+    method: 'POST',
+    headers: {'content-type': 'application/x-www-form-urlencoded'},
+    data: new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: 'hrxEwXcHs69kGHPxvlFM6FVIXeNWPAOX',
+      client_secret: process.env.CLIENT_SECRET,
+      code: authCode,
+      redirect_uri: 'https://acorngmbackend.onrender.com/redirected'
+    })
+  };
+  
+  // {~~} validate access and id tokens
+  // ( https://auth0.com/docs/get-started/authentication-and-authorization-flow/authorization-code-flow/add-login-auth-code-flow#response )
+
+  const response = await fetch('https://dev-3v7qe6ure8f3p1o1.us.auth0.com/oauth/token', options);
+  if (!response.ok) {
+    console.error(`Bad response while converting code to token: ${response.status} - ${response.statusText}.`);
+    return null;
+  }
+
+  return await response.text();
 }
 
 
