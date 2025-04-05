@@ -25,8 +25,11 @@ const CallbackCode = class {
 let callbackCodes = [];
 
 function removeExpiredCallbackCodes() {
+  let oldLength = callbackCodes.length;
   let now = new Date();
   callbackCodes = callbackCodes.filter(callbackCode => {now < callbackCode.expiration});
+  let newLength = callbackCodes.length;
+  console.log(`Removed expired callback codes: ${oldLength} -> ${newLength}`);
 }
 
 
@@ -54,6 +57,7 @@ function handleGetRedirected(req, res, next) {
 
   removeExpiredCallbackCodes();
   callbackCodes.push(callbackCode);
+  console.log(tempLoginToken, callbackCodes, callbackCodes.length);
   res.send("<h1>Login Successful!</h1><p>You can safely close this tab and return to the AcornGM program.</p>");
 }
 
@@ -66,7 +70,7 @@ function handleCheckCallback(req, res) {
   }
   removeExpiredCallbackCodes();
 
-  console.log(tempLoginToken, callbackCodes);
+  console.log(tempLoginToken, callbackCodes, callbackCodes.length);
 
   for (let i = 0; i < callbackCodes.length; i++) {
     if (callbackCodes[i].tempLoginToken == tempLoginToken) {
