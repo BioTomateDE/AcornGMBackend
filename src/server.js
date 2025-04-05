@@ -22,14 +22,15 @@ const CallbackCode = class {
 }
 
 
-let callbackCodes = [];
-
 function removeExpiredCallbackCodes() {
   let oldLength = callbackCodes.length;
   let now = new Date();
   callbackCodes = callbackCodes.filter(callbackCode => now < callbackCode.expiration);
   let newLength = callbackCodes.length;
-  console.log(`Removed expired callback codes: ${oldLength} -> ${newLength}`);
+
+  if (oldLength != newLength) { 
+    console.log(`Removed expired callback codes: ${oldLength} -> ${newLength}`);
+  }
 }
 
 
@@ -44,20 +45,17 @@ function handleGetRedirected(req, res, next) {
     return;
   }
 
-  // let parts = req.url.split("/");
-  // let tempLoginToken = parts[parts.length - 1];
   let tempLoginToken = req.query.tempLoginToken;
-
   if (!(typeof tempLoginToken === 'string')) {
     res.send("Invalid Temp Login Token in Redirect URL!");
     return;
   }
 
   let callbackCode = new CallbackCode(req.query.code, tempLoginToken);
-
   removeExpiredCallbackCodes();
   callbackCodes.push(callbackCode);
-  console.log(tempLoginToken, callbackCodes, callbackCodes.length);
+  
+  console.log(`Created callback code ${callbackCode} for temporary login ${tempLoginToken} (now ${callbackCodes.length}).`);
   res.send("<h1>Login Successful!</h1><p>You can safely close this tab and return to the AcornGM program.</p>");
 }
 
@@ -83,14 +81,16 @@ function handleCheckCallback(req, res) {
 }
 
 
+// main
+let callbackCodes = [];
+
 app.get("/auth_config.json", (req, res) => {
   res.sendFile(path.join(frontendDir, "auth_config.json"));
 });
 
-// enforce on upload mod
 app.get("/", handleGetRoot);
 app.get("/redirected/", handleGetRedirected);
-app.post("/upload/mod", jwtCheck);
+app.post("/upload/mod", jwtCheck);    // enforce on upload mod (change this later)
 app.get("/check_callback", handleCheckCallback);
 app.use(express.static(frontendDir));
 
@@ -100,6 +100,5 @@ app.get('/authorized', function (req, res) {
 
 
 app.listen(port);
-
-console.log('Running on port ', port);
+console.log('Running on port', port);
 
