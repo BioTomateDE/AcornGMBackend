@@ -110,7 +110,9 @@ async function convertAuthCodeToToken(authCode) {
     return null;
   }
 
-  return await response.json().access_token;
+  let json = await response.json();
+
+  return json['access_token'];
 }
 
 
