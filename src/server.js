@@ -27,7 +27,7 @@ let callbackCodes = [];
 function removeExpiredCallbackCodes() {
   let oldLength = callbackCodes.length;
   let now = new Date();
-  callbackCodes = callbackCodes.filter(callbackCode => {now < callbackCode.expiration});
+  callbackCodes = callbackCodes.filter(callbackCode => {now > callbackCode.expiration});
   let newLength = callbackCodes.length;
   console.log(`Removed expired callback codes: ${oldLength} -> ${newLength}`);
 }
