@@ -89,13 +89,14 @@ async function convertAuthCodeToToken(authCode) {
   let client_secret = process.env.CLIENT_SECRET;
   let options = {
     method: 'POST',
-    headers: {'content-type': 'application/x-www-form-urlencoded'},
-    body: JSON.stringify({
-      grant_type: 'authorization_code',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
       client_id: 'hrxEwXcHs69kGHPxvlFM6FVIXeNWPAOX',
       client_secret: client_secret,
-      code: authCode,
-      redirect_uri: 'https://acorngmbackend.onrender.com/redirected'
+      audience: 'abc123'
     })
   };
   
@@ -109,7 +110,7 @@ async function convertAuthCodeToToken(authCode) {
     return null;
   }
 
-  return await response.text();
+  return await response.json().access_token;
 }
 
 
