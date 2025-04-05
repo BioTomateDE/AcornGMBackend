@@ -33,7 +33,7 @@ const login = async () => {
 
     await auth0Client.loginWithRedirect({
         authorizationParams: {
-            redirect_uri: new URL(`./redirected/${tempLoginToken}`, window.location.origin)
+            redirect_uri: new URL(`./redirected/?tempLoginToken=${tempLoginToken}`, window.location.origin)
         }
     });
 };

@@ -41,8 +41,9 @@ function handleGetRedirected(req, res, next) {
     return;
   }
 
-  let parts = req.url.split("/");
-  let tempLoginToken = parts[parts.length - 1];
+  // let parts = req.url.split("/");
+  // let tempLoginToken = parts[parts.length - 1];
+  let tempLoginToken = req.query.tempLoginToken;
 
   if (!(typeof tempLoginToken === 'string')) {
     res.send("Invalid Temp Login Token in Redirect URL!");
@@ -82,7 +83,7 @@ app.get("/auth_config.json", (req, res) => {
 
 // enforce on upload mod
 app.get("/", handleGetRoot);
-app.get("/redirected/:test", handleGetRedirected);
+app.get("/redirected/", handleGetRedirected);
 app.post("/upload/mod", jwtCheck);
 app.get("/check_callback", handleCheckCallback);
 app.use(express.static(frontendDir));
