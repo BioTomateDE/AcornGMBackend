@@ -56,7 +56,7 @@ async function handleGetRedirected(req, res, next) {
     res.send("<h1>Login failed!</h1><p>Could not get access token from Auth0!</p>");
     return;
   }
-  
+
   let callbackCode = new CallbackToken(token, tempLoginToken);
   removeExpiredCallbackTokens();
   callbackCodes.push(callbackCode);
@@ -73,8 +73,6 @@ function handleCheckCallback(req, res) {
     return;
   }
   removeExpiredCallbackTokens();
-
-  console.log(tempLoginToken, callbackCodes, callbackCodes.length);
 
   for (let i = 0; i < callbackCodes.length; i++) {
     if (callbackCodes[i].tempLoginToken == tempLoginToken) {
@@ -106,6 +104,7 @@ async function convertAuthCodeToToken(authCode) {
   const response = await fetch('https://dev-3v7qe6ure8f3p1o1.us.auth0.com/oauth/token', options);
   if (!response.ok) {
     console.error(`Bad response while converting code to token: ${response.status} - ${response.statusText}.`);
+    console.warn(await response.text());
     return null;
   }
 
