@@ -76,7 +76,7 @@ function handleCheckCallback(req, res) {
 
   for (let i = 0; i < callbackCodes.length; i++) {
     if (callbackCodes[i].tempLoginToken == tempLoginToken) {
-      res.send(callbackCodes[i].code);
+      res.send(callbackCodes[i].accessToken);
       return;
     }
   }
