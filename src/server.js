@@ -87,11 +87,10 @@ function handleCheckCallback(req, res) {
 
 async function convertAuthCodeToToken(authCode) {
   let client_secret = process.env.CLIENT_SECRET;
-  console.log(client_secret)
   let options = {
     method: 'POST',
     headers: {'content-type': 'application/x-www-form-urlencoded'},
-    data: new URLSearchParams({
+    body: JSON.stringify({
       grant_type: 'authorization_code',
       client_id: 'hrxEwXcHs69kGHPxvlFM6FVIXeNWPAOX',
       client_secret: client_secret,
