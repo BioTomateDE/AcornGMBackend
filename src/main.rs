@@ -20,14 +20,6 @@ use once_cell::unsync::Lazy;
 use tokio::sync::RwLock;
 use crate::not_found_html::NOT_FOUND_HTML;
 
-// static NOT_FOUND_HTML: Lazy<Arc<RwLock<String>>> = Lazy::new(|| {
-//     // Load the `not_found.html` file when the server starts
-//     // THIS USES THE frontend dir MANUALLY!
-//     let content: String = std::fs::read_to_string("./frontend/not_found.html")
-//         .unwrap_or_else(|_| "<h1>404 Not Found</h1>".to_string());
-//
-//     Arc::new(RwLock::new(content))
-// });
 
 
 async fn not_found(uri: String) -> impl IntoResponse {
@@ -60,6 +52,7 @@ async fn main() {
         .expect("Could not start logger!");
 
 
+    // set up http server
     let serve_dir_path: PathBuf = PathBuf::from("./frontend/");  // "root" dir for url paths
 
     let app: Router = Router::new()
@@ -75,5 +68,4 @@ async fn main() {
     axum::serve(listener, app)
         .await.expect("Could not serve the http server!");
 }
-
 
