@@ -70,7 +70,7 @@ async fn main() {
 
     info!("Accounts: {accounts:?}");
 
-    let accounts: Arc<Vec<AcornAccount>> = Arc::new(accounts);
+    // let accounts: Arc<Vec<AcornAccount>> = Arc::new(accounts);
 
     // get other environment variables
     let discord_app_client_secret: String = match std::env::var("DISCORD_CLIENT_SECRET") {
@@ -89,7 +89,9 @@ async fn main() {
         .route("/", get_service(ServeFile::new(serve_dir_path.join("index.html"))))
         .route("/styles.css", get_service(ServeFile::new(serve_dir_path.join("styles.css"))))
         .route("/discord_auth_redirected", get_service(ServeFile::new(serve_dir_path.join("discord_auth_redirected.html"))))
-        .route("/api/discord_auth", get(|query| async { handle_get_discord_auth(&discord_app_client_secret, &accounts, query).await }))
+        .route("/api/discord_auth", get(move |query| async move {
+            handle_get_discord_auth("gadgd", &[], query).await
+        }))
         .layer(Extension(discord_app_client_secret))
         .layer(Extension(accounts))
         .fallback(|uri: Uri| not_found(uri.to_string()))

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use axum::extract::Query;
 use axum::{Extension, Json};
+use axum::response::IntoResponse;
 use serde::Deserialize;
 use reqwest::Client;
 use serde_json::Value;
@@ -92,7 +93,8 @@ pub async fn handle_get_discord_auth(
     discord_app_client_secret: &str,
     accounts: &[AcornAccount],
     Query(params): Query<DiscordAuthQuery>,
-) -> (axum::http::StatusCode, Json<Value>) {
+// ) -> (axum::http::StatusCode, Json<Value>) {
+) -> impl IntoResponse {
     // Get access/refresh tokens from OAuth2 code
     let token_response: TokenResponse = match exchange_code(discord_app_client_secret, &params.discord_code).await {
         Ok(token_response) => token_response,
