@@ -1,0 +1,42 @@
+pub const NOT_FOUND_HTML: &'static str = "\
+<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+    <meta charset=\"UTF-8\">
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+    <title>Page Not Found</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #161718; /* Dark background */
+            color: #ecf0f1; /* Light text color */
+            text-align: center;
+            padding-top: 50px;
+        }
+        h1 {
+            font-size: 50px;
+            color: #e74c3c; /* Red color for error message */
+        }
+        p {
+            font-size: 20px;
+            color: #bdc3c7; /* Lighter text color */
+        }
+        a {
+            font-size: 18px;
+            color: #3498db; /* Blue color for links */
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline; /* Underline on hover */
+        }
+    </style>
+</head>
+<body>
+    <h1>404 - Page Not Found</h1>
+    <p>The page you were looking for could not be found: <strong>{url_path}</strong></p>
+    <p><a href=\"/\">Go back to the homepage</a></p>
+</body>
+</html>
+";
