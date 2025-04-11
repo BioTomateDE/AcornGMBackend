@@ -41,7 +41,7 @@ pub struct Account {
 }
 
 
-const DBX_ACCOUNTS_PATH: &'static str = "acorngm/accounts.json";
+const DBX_ACCOUNTS_PATH: &'static str = "/accounts.json";
 
 pub async fn download_accounts(client: UserAuthDefaultClient) -> Result<Vec<Account>, String> {
     let string = download_file_string(client, DBX_ACCOUNTS_PATH.to_string()).await?;

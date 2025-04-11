@@ -18,9 +18,14 @@ use axum::http::Uri;
 use axum::response::IntoResponse;
 use axum::routing::get_service;
 use chrono::FixedOffset;
-use log::{info, warn, error};
+use dropbox_sdk::default_async_client::UserAuthDefaultClient;
+use log::{info, warn, error, debug};
 use once_cell::unsync::Lazy;
 use tokio::sync::RwLock;
+// use colored::{Color, ColoredString};
+use colored::{Color, Colorize};
+use crate::accounts::{download_accounts, Account};
+use crate::dropbox::initialize_dropbox;
 use crate::not_found_html::NOT_FOUND_HTML;
 
 
@@ -38,17 +43,24 @@ async fn main() {
     dotenv::dotenv().ok();
 
     // set up logging
-    flexi_logger::Logger::try_with_str("info")
+    flexi_logger::Logger::try_with_str("info, main=trace")
         .expect("Could not set up logger!")
         .format(move |w, now, log_record| {
             let gmt_plus2: FixedOffset = FixedOffset::east_opt(2 * 3600).expect("Could not generate (static) timezone in main");
             let now = now.now_utc_owned().with_timezone(&gmt_plus2);
+            let level_color = match log_record.level() {
+                log::Level::Error => Color::Red,
+                log::Level::Warn => Color::Yellow,
+                log::Level::Info => Color::Green,
+                log::Level::Debug => Color::Cyan,
+                log::Level::Trace => Color::Magenta,
+            };
             write!(
                 w,
-                "{} [{}] - {}",
-                now.format("%Y-%m-%d %H:%M:%S").to_string(),
-                log_record.level(),
-                log_record.args()
+                "{} [{:<5}] {}",
+                now.format("%Y-%m-%d %H:%M:%S.%3f").to_string(),
+                log_record.level().to_string().color(level_color),
+                log_record.args().to_string().color(level_color),
             )
         })
         .start()
@@ -56,6 +68,17 @@ async fn main() {
 
 
     // get important files from dropbox
+    let dropbox_client: UserAuthDefaultClient = initialize_dropbox().await;
+    let accounts: Vec<Account> = match download_accounts(dropbox_client).await {
+        Ok(accounts) => accounts,
+        Err(err) => {
+            error!("Failed to load accounts from DropBox: {err}");
+            std::process::exit(1);
+        },
+    };
+
+    info!("Accounts: {accounts:?}");
+
 
 
     // set up http server

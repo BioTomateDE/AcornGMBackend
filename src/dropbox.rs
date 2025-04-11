@@ -1,4 +1,3 @@
-use std::string::FromUtf8Error;
 use dropbox_sdk::{
     default_async_client::{NoauthDefaultClient, UserAuthDefaultClient},
     async_routes::files,
