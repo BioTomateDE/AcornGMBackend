@@ -9,18 +9,24 @@
 <h1>AcornGM</h1>
 <h2>Finishing Login Process...</h2>
 <p><strong>Login Status:</strong> <span id="login-status">Waiting for script...</span></p>
-<button hidden="hidden" id="login-button" onclick="doLogin()">Login</button>
 <button hidden="hidden" id="register-button" onclick="doRegister()">Login</button>
 <script>
     function checkString(string) {
         return typeof string === 'string' && string.length >= 0
     }
+    function doRegister() {
+        if (!checkString(discordAccessToken) || !checkString(discordUserId)) return;
+        window.location.replace(new URL("register", ACORNGM_API_URL) + new URLSearchParams( {discordAccessToken, discordUserId} ));
+    }
 
     // const ACORNGM_API_URL = "https://acorngm.onrender.com";
     const ACORNGM_API_URL = "http://localhost:3000";
+
+    let discordAccessToken = null;
+    let discordUserId = null;
+
     window.onload = async () => {
         const loginStatus = document.getElementById("login-status");
-        const loginButton = document.getElementById("login-button");
         const registerButton = document.getElementById("register-button");
 
         const urlParams = new URLSearchParams(window.location.search);
@@ -30,7 +36,7 @@
             return;
         }
 
-        const query = new URLSearchParams({discordCode: discordCode});
+        const query = new URLSearchParams( {discord_code: discordCode} );
         const response = await fetch(new URL("discord_auth" + query, ACORNGM_API_URL), {
             method: 'GET',
             headers: {
@@ -46,27 +52,19 @@
             return;
         }
 
-        const discordRefreshToken = resp['discordRefreshToken'];
-        if (!checkString(discordRefreshToken)) {
-            console.error(`Response is missing discord refresh token: ${resp}`);
-            loginStatus.innerText = `Error: Invalid or empty response by AcornGM Server`;
-            return;
-        }
-
-        const discordUserId = resp['discordUserId'];
-        // if user id exists, then login. else, register.
-        let isNewUser = !checkString(discordUserId);
+        const isNewUser = resp['register'];    // bool
         if (isNewUser) {
             registerButton.hidden = false;
         } else {
-            loginButton.hidden = false;
-            localStorage.setItem("discordUserId", discordUserId);
+            discordAccessToken = resp['discordAccessToken'];
+            discordUserId = resp['discordUserId'];
+            if (!checkString(discordAccessToken) || !checkString(discordUserId)) {
+                console.error(`Response is missing discord access token or user ID: ${resp}`);
+                loginStatus.innerText = `Error: Invalid or empty response by AcornGM Server`;
+                return;
+            }
         }
-
-        localStorage.setItem("discordRefreshToken", discordRefreshToken);
         loginStatus.innerText = "Success";
-
-        return await response.json();
     }
 </script>
 </body>

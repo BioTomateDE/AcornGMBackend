@@ -2,7 +2,6 @@ mod not_found_html;
 mod login;
 mod dropbox;
 mod accounts;
-mod discord;
 
 use axum::{
     Router,
@@ -25,7 +24,7 @@ use once_cell::unsync::Lazy;
 use tokio::sync::RwLock;
 // use colored::{Color, ColoredString};
 use colored::{Color, Colorize};
-use crate::accounts::{download_accounts, Account};
+use crate::accounts::{download_accounts, AcornAccount};
 use crate::dropbox::initialize_dropbox;
 use crate::not_found_html::NOT_FOUND_HTML;
 
@@ -70,7 +69,7 @@ async fn main() {
 
     // get important files from dropbox
     let dropbox_client: UserAuthDefaultClient = initialize_dropbox().await;
-    let accounts: Vec<Account> = match download_accounts(dropbox_client).await {
+    let accounts: Vec<AcornAccount> = match download_accounts(dropbox_client).await {
         Ok(accounts) => accounts,
         Err(err) => {
             error!("Failed to load accounts from DropBox: {err}");
@@ -80,6 +79,14 @@ async fn main() {
 
     info!("Accounts: {accounts:?}");
 
+    // get other environment variables
+    let discord_app_client_secret: String = match std::env::var("DISCORD_CLIENT_SECRET") {
+        Ok(var) => var,
+        Err(error) => {
+            error!("Could not get environment variable for discord client secret: {error}");
+            std::process::exit(1);
+        },
+    };
 
 
     // set up http server
