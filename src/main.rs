@@ -1,4 +1,6 @@
 mod not_found_html;
+mod login;
+mod file_management;
 
 use axum::{
     Router,

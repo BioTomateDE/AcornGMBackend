@@ -12,3 +12,5 @@ flexi_logger = "0.30.1"
 once_cell = "1.21.3"
 dotenv = "0.15.0"
 chrono = "0.4.40"
+dropbox-sdk = { version = "0.19.1", features = ["async_routes", "default_async_client"] }
+tokio-util = { version = "0.7.14", features = ["compat"] }
