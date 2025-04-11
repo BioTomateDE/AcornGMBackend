@@ -20,7 +20,7 @@
     }
 
     // const ACORNGM_API_URL = "https://acorngm.onrender.com";
-    const ACORNGM_API_URL = "http://localhost:3000";
+    const ACORNGM_API_URL = "http://localhost:8080";
 
     let discordAccessToken = null;
     let discordUserId = null;
@@ -37,7 +37,7 @@
         }
 
         const query = new URLSearchParams( {discord_code: discordCode} );
-        const response = await fetch(new URL("discord_auth" + query, ACORNGM_API_URL), {
+        const response = await fetch(new URL("api/discord_auth" + query, ACORNGM_API_URL), {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',

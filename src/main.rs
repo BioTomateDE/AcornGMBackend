@@ -3,15 +3,8 @@ mod login;
 mod dropbox;
 mod accounts;
 
-use axum::{
-    Router,
-    routing::get,
-    handler::Handler,
-    response::Html,
-    http::StatusCode
-};
-use tower_http::services::{ServeDir, ServeFile};
-use std::net::SocketAddr;
+use axum::{Router, routing::get, response::Html, Extension};
+use tower_http::services::ServeFile;
 use std::path::PathBuf;
 use std::sync::Arc;
 use axum::http::Uri;
@@ -20,12 +13,10 @@ use axum::routing::get_service;
 use chrono::FixedOffset;
 use dropbox_sdk::default_async_client::UserAuthDefaultClient;
 use log::{info, warn, error, debug};
-use once_cell::unsync::Lazy;
-use tokio::sync::RwLock;
-// use colored::{Color, ColoredString};
 use colored::{Color, Colorize};
 use crate::accounts::{download_accounts, AcornAccount};
 use crate::dropbox::initialize_dropbox;
+use crate::login::handle_get_discord_auth;
 use crate::not_found_html::NOT_FOUND_HTML;
 
 
@@ -79,6 +70,8 @@ async fn main() {
 
     info!("Accounts: {accounts:?}");
 
+    let accounts: Arc<Vec<AcornAccount>> = Arc::new(accounts);
+
     // get other environment variables
     let discord_app_client_secret: String = match std::env::var("DISCORD_CLIENT_SECRET") {
         Ok(var) => var,
@@ -94,6 +87,11 @@ async fn main() {
 
     let app: Router = Router::new()
         .route("/", get_service(ServeFile::new(serve_dir_path.join("index.html"))))
+        .route("/styles.css", get_service(ServeFile::new(serve_dir_path.join("styles.css"))))
+        .route("/discord_auth_redirected", get_service(ServeFile::new(serve_dir_path.join("discord_auth_redirected.html"))))
+        .route("/api/discord_auth", get(|query| async { handle_get_discord_auth(&discord_app_client_secret, &accounts, query).await }))
+        .layer(Extension(discord_app_client_secret))
+        .layer(Extension(accounts))
         .fallback(|uri: Uri| not_found(uri.to_string()))
     ;
 
