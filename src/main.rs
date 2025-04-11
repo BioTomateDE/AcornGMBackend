@@ -2,6 +2,7 @@ mod not_found_html;
 mod login;
 mod dropbox;
 mod accounts;
+mod discord;
 
 use axum::{
     Router,
