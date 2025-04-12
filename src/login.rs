@@ -104,11 +104,8 @@ impl DiscordHandler {
         }
     }
     pub async fn handle_get_discord_auth(&self, code: &str) -> status::Custom<Json<Value>> {
-        let discord_app_client_secret = "test";
-        let accounts: Vec<AcornAccount> = vec![];
-
         // Get access/refresh tokens from OAuth2 code
-        let token_response: TokenResponse = match exchange_code(discord_app_client_secret, code).await {
+        let token_response: TokenResponse = match exchange_code(&self.discord_app_client_secret, code).await {
             Ok(token_response) => token_response,
             Err(error) => return status::Custom(Status::InternalServerError, Json(serde_json::json!({
                 "error": format!("Error while getting discord access token: {error}"),
@@ -124,7 +121,7 @@ impl DiscordHandler {
         };
 
         // check if account already exists; if it does, return acorn access token
-        for account in accounts {
+        for account in self.accounts.as_ref() {
             if account.discord_id != user_info.id { continue }
             return status::Custom(Status::Ok, Json(serde_json::json!({
                 "register": true,
