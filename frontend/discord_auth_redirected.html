@@ -15,14 +15,14 @@
         return typeof string === 'string' && string.length >= 0
     }
     function doRegister() {
-        if (!checkString(discordAccessToken) || !checkString(discordUserId)) return;
-        window.location.replace(new URL("register", ACORNGM_API_URL) + new URLSearchParams( {discordAccessToken, discordUserId} ));
+        if (!checkString(discordRefreshToken) || !checkString(discordUserId)) return;
+        window.location.replace(new URL("register", ACORNGM_API_URL) + new URLSearchParams( {discordRefreshToken, discordUserId} ));
     }
 
     // const ACORNGM_API_URL = "https://acorngm.onrender.com";
     const ACORNGM_API_URL = "http://localhost:8080";
 
-    let discordAccessToken = null;
+    let discordRefreshToken = null;
     let discordUserId = null;
 
     window.onload = async () => {
@@ -56,10 +56,10 @@
         if (isNewUser) {
             registerButton.hidden = false;
         } else {
-            discordAccessToken = resp['discordAccessToken'];
+            discordRefreshToken = resp['discordRefreshToken'];
             discordUserId = resp['discordUserId'];
-            if (!checkString(discordAccessToken) || !checkString(discordUserId)) {
-                console.error(`Response is missing discord access token or user ID: ${resp}`);
+            if (!checkString(discordRefreshToken) || !checkString(discordUserId)) {
+                console.error(`Response is missing discord refresh token or user ID: ${resp}`);
                 loginStatus.innerText = `Error: Invalid or empty response by AcornGM Server`;
                 return;
             }

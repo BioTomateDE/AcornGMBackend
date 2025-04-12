@@ -18,3 +18,4 @@ serde_json = "1.0.140"
 colored = "3.0.0"
 reqwest = { version = "0.12.15", features = ["json"] }
 rocket_dyn_templates = "0.2.0"
+regex = "1.11.1"

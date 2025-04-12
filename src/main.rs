@@ -1,11 +1,9 @@
-mod not_found_html;
 mod login;
 mod dropbox;
 mod accounts;
 
 #[macro_use] extern crate rocket;
-use tower_http::services::ServeFile;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use chrono::FixedOffset;
 use dropbox_sdk::default_async_client::UserAuthDefaultClient;
@@ -15,9 +13,9 @@ use rocket::fs::FileServer;
 use crate::accounts::{download_accounts, AcornAccount};
 use crate::dropbox::initialize_dropbox;
 use crate::login::{handle_get_discord_auth, DiscordHandler};
-use rocket_dyn_templates::{Template, context};
+use rocket_dyn_templates::Template;
 use rocket::response::Redirect;
-use rocket::yansi::Paint;
+use tokio::sync::RwLock;
 
 #[get("/")]
 fn handle_index() -> Redirect {
@@ -69,7 +67,7 @@ async fn rocket() -> _ {
     };
 
     info!("Accounts: {accounts:?}");
-    let accounts = Arc::from(accounts);
+    let accounts = Arc::from(RwLock::from(accounts));
 
     // get other environment variables
     let discord_app_client_secret: String = match std::env::var("DISCORD_CLIENT_SECRET") {
@@ -84,7 +82,7 @@ async fn rocket() -> _ {
 
     info!("Starting server at {BIND_IP}:{BIND_PORT}/");
     rocket::build()
-        .manage(discord_handler)
+        .manage(Arc::from(RwLock::from(discord_handler)))
         .mount("/", routes![handle_index, handle_get_discord_auth])
         .mount("/", FileServer::from(SERVE_DIR_PATH.clone()))
         .attach(Template::fairing())

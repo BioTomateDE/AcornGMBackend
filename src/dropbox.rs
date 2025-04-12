@@ -41,7 +41,7 @@ pub async fn list_files(client: UserAuthDefaultClient, mut path: String) -> Resu
     }
 }
 
-pub async fn upload_file_raw(client: UserAuthDefaultClient, mut path: String, data: bytes::Bytes) -> Result<(), String> {
+pub async fn upload_file_raw(client: UserAuthDefaultClient, path: String, data: bytes::Bytes) -> Result<(), String> {
     let upload_args: UploadArg = UploadArg::new(path.clone())
         .with_client_modified(chrono::Utc::now().format(DROPBOX_TIMESTAMP_FORMAT).to_string());
 

@@ -17,11 +17,12 @@
 <!-- Registration form -->
 <form id="registerForm">
     <label for="username">AcornGM Username:</label><br>
+    <p class="username-permanent-warning">You will not be able to change this name later, so choose wisely.</p>
     <input type="text" id="username" name="username" required><br><br>
 
     <!-- Error message with icon -->
     <p id="usernameError" style="display: none;">
-        <span class="error-icon">⚠️</span>Username must contain only letters, numbers, dots, underscores, and hyphens, without spaces.
+        <span class="error-icon">⚠️</span>Username must contain only latin letters, digits, dots, underscores, and hyphens; without spaces.
     </p>
 
     <input type="submit" value="Register">
@@ -36,12 +37,12 @@
 
     // Get Discord User ID and Discord Username from query params
     const discordUserId = getQueryParam("discordUserId");
-    const discordAccessToken = getQueryParam("discordAccessToken");
+    const discordRefreshToken = getQueryParam("discordRefreshToken");
     const discordUsername = getQueryParam("discordUsername");
 
     // Ensure all query params are set
-    if (!discordUserId || !discordAccessToken || !discordUsername) {
-        alert("Required parameters (discordUserId, discordAccessToken, discordUsername) are missing from the URL!");
+    if (!discordUserId || !discordRefreshToken || !discordUsername) {
+        alert("Required parameters (discordUserId, discordRefreshToken, discordUsername) are missing from the URL!");
         throw new Error("Missing query parameters");
     }
 
@@ -98,8 +99,8 @@
         } else {
             // If form is valid, proceed with the submission (send data)
             const requestData = {
-                discordUserId,
-                discordAccessToken,
+                discord_user_id: discordUserId,
+                discord_refresh_token: discordRefreshToken,
                 username: usernameValue,
             };
 

@@ -83,3 +83,8 @@ input[type="submit"]:hover {
 .error-icon {
     margin-right: 5px; /* Space between icon and text */
 }
+
+
+.username-permanent-warning {
+    font-size: 0.8em;
+}
