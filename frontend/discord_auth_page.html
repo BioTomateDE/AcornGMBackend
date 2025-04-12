@@ -19,6 +19,26 @@
         window.location.replace("/register.html?" + new URLSearchParams( {discordRefreshToken, discordUserId, discordUsername} ));
     }
 
+    async function postTempLoginToken(tempLoginToken, discordUserId) {
+        let resp = await fetch('/api/temp_login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                temp_login_token: tempLoginToken,
+                discord_id: discordUserId
+            }),
+        })
+
+        let json = await resp.json();
+        if (!resp.ok) {
+            console.error(`Could not post temp login token; AcornGM API responded with ${resp.status} - ${resp.statusText}: ${json.error}`);
+            return false;
+        }
+        return true;
+    }
+
     let discordRefreshToken = null;
     let discordUserId = null;
     let discordUsername = null;
@@ -92,6 +112,19 @@
                 return;
             }
             registerButton.hidden = false;
+        } else {
+            let tempLoginToken = localStorage.getItem("tempLoginToken");
+            if (!checkString(tempLoginToken)) {
+                console.error(`Temp login token is not set!`);
+                return;
+            }
+            localStorage.removeItem("tempLoginToken");
+
+            if (!await postTempLoginToken(tempLoginToken, discordUserId)) {
+                loginStatus.innerText = "Error: Temporary Login Token is not set! This shouldn't happen if you were redirected by the AcornGM program.";
+                return;
+            }
+
         }
 
         loginStatus.innerText = "Success";

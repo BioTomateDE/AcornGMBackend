@@ -65,6 +65,26 @@
         return true;
     };
 
+    const postTempLoginToken = async (tempLoginToken, discordUserId) => {
+        let resp = await fetch('/api/temp_login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                temp_login_token: tempLoginToken,
+                discord_id: discordUserId
+            }),
+        })
+
+        let json = await resp.json();
+        if (!resp.ok) {
+            console.error(`Could not post temp login token; AcornGM API responded with ${resp.status} - ${resp.statusText}: ${json.error}`);
+            return false;
+        }
+        return true;
+    };
+
     // Immediate Username validation (no throttling)
     usernameInput.addEventListener("input", () => {
         const usernameValue = usernameInput.value;
@@ -114,6 +134,17 @@
 
             if (!resp.ok) {
                 console.error(`Registration failed; AcornGM API responded with ${resp.status} - ${resp.statusText}: ${json.error}`);
+                return;
+            }
+
+            let tempLoginToken = localStorage.getItem("tempLoginToken");
+            if (!checkString(tempLoginToken)) {
+                console.error(`Registration failed; temp login token is not set!`);
+                return;
+            }
+            localStorage.removeItem("tempLoginToken");
+
+            if (!await postTempLoginToken(tempLoginToken, discordUserId)) {
                 return;
             }
 
