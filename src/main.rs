@@ -14,13 +14,13 @@ use colored::{Color, Colorize};
 use rocket::fs::FileServer;
 use crate::accounts::{download_accounts, AcornAccount};
 use crate::dropbox::initialize_dropbox;
-use crate::login::handle_get_discord_auth;
+use crate::login::{handle_get_discord_auth, DiscordHandler};
 use rocket_dyn_templates::{Template, context};
 use rocket::response::Redirect;
 
 #[get("/")]
 fn handle_index() -> Redirect {
-    Redirect::to(SERVE_DIR_PATH.join("index.html").to_str().expect("Could not convert index.html path to string").to_string())
+    Redirect::to("index.html")
 }
 
 
@@ -78,8 +78,13 @@ async fn rocket() -> _ {
         },
     };
 
+    let accounts = Arc::from(accounts);
+
+    let discord_handler = DiscordHandler::new(&discord_app_client_secret, accounts);
+
     info!("Server running at {BIND_IP}:{BIND_PORT}/");
     rocket::build()
+        .manage(discord_handler)
         .mount("/", routes![handle_index, handle_get_discord_auth])
         .mount("/", FileServer::from(SERVE_DIR_PATH.clone()))
         .attach(Template::fairing())

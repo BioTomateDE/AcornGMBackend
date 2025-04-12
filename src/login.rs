@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use serde::Deserialize;
 use reqwest::Client;
 use rocket::http::{RawStr, Status};
@@ -8,7 +9,7 @@ use rocket::response::status;
 use rocket::serde::json::Json;
 use serde_json::Value;
 use rocket::form::FromForm;
-use rocket::Response;
+use rocket::{Response, State};
 
 #[derive(Debug, Clone, FromForm)]
 struct DiscordAuthQuery {
@@ -90,44 +91,56 @@ async fn get_user_info(access_token: &str) -> Result<DiscordUserInfo, String> {
     res.json::<DiscordUserInfo>().await.map_err(|e| format!("Failed to parse JSON: {e}"))
 }
 
-#[get("/discord_auth?<code>")]
-pub async fn handle_get_discord_auth(
-    // discord_app_client_secret: &str,
-    // accounts: &[AcornAccount],
-    code: &str,
-) -> status::Custom<Json<Value>> {
-    let discord_app_client_secret = "test";
-    let accounts: Vec<AcornAccount> = vec![];
 
-    // Get access/refresh tokens from OAuth2 code
-    let token_response: TokenResponse = match exchange_code(discord_app_client_secret, code).await {
-        Ok(token_response) => token_response,
-        Err(error) => return status::Custom(Status::InternalServerError, Json(serde_json::json!({
-            "error": format!("Error while getting discord access token: {error}"),
-        })))
-    };
+pub struct DiscordHandler {
+    discord_app_client_secret: String,
+    accounts: Arc<[AcornAccount]>,
+}
+impl DiscordHandler {
+    pub fn new(discord_app_client_secret: &str, accounts: Arc<[AcornAccount]>) -> Self {
+        Self {
+            discord_app_client_secret: discord_app_client_secret.to_string(),
+            accounts,
+        }
+    }
+    pub async fn handle_get_discord_auth(&self, code: &str) -> status::Custom<Json<Value>> {
+        let discord_app_client_secret = "test";
+        let accounts: Vec<AcornAccount> = vec![];
 
-    // Get Discord User ID
-    let user_info: DiscordUserInfo = match get_user_info(&token_response.access_token).await {
-        Ok(user_info) => user_info,
-        Err(error) => return status::Custom(Status::InternalServerError, Json(serde_json::json!({
-            "error": format!("Error while getting discord user info: {error}"),
-        })))
-    };
+        // Get access/refresh tokens from OAuth2 code
+        let token_response: TokenResponse = match exchange_code(discord_app_client_secret, code).await {
+            Ok(token_response) => token_response,
+            Err(error) => return status::Custom(Status::InternalServerError, Json(serde_json::json!({
+                "error": format!("Error while getting discord access token: {error}"),
+            })))
+        };
 
-    // check if account already exists; if it does, return acorn access token
-    for account in accounts {
-        if account.discord_id != user_info.id { continue }
-        return status::Custom(Status::Ok, Json(serde_json::json!({
-            "register": true,
+        // Get Discord User ID
+        let user_info: DiscordUserInfo = match get_user_info(&token_response.access_token).await {
+            Ok(user_info) => user_info,
+            Err(error) => return status::Custom(Status::InternalServerError, Json(serde_json::json!({
+                "error": format!("Error while getting discord user info: {error}"),
+            })))
+        };
+
+        // check if account already exists; if it does, return acorn access token
+        for account in accounts {
+            if account.discord_id != user_info.id { continue }
+            return status::Custom(Status::Ok, Json(serde_json::json!({
+                "register": true,
+            })))
+        }
+
+        // account does not exist; let client register
+        status::Custom(Status::Ok, Json(serde_json::json!({
+            "register": false,
+            "discordAccessToken": token_response.access_token,
+            "discordUserId": user_info.id,
         })))
     }
-
-    // account does not exist; let client register
-    status::Custom(Status::Ok, Json(serde_json::json!({
-        "register": false,
-        "discordAccessToken": token_response.access_token,
-        "discordUserId": user_info.id,
-    })))
+}
+#[get("/discord_auth?<code>")]
+pub async fn handle_get_discord_auth(handler: &State<DiscordHandler>, code: &str) -> status::Custom<Json<Value>> {
+    handler.handle_get_discord_auth(code).await
 }
 
