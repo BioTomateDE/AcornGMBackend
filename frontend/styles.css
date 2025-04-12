@@ -45,10 +45,10 @@ label {
 }
 
 input[type="text"] {
-    width: 100%;
+    width: calc(100% - 1em);
     padding: 0.5em;
     margin-top: 0.5em;
-    margin-bottom: 1em;
+    margin-bottom: 0.5em;
     background-color: #3a3b3f;
     color: #e2e2d5;
     border: 1px solid #555;
@@ -86,5 +86,7 @@ input[type="submit"]:hover {
 
 
 .username-permanent-warning {
-    font-size: 0.8em;
+    margin: 0.3em 0 0.7em 0;
+    font-size: 0.85em;
+    color: #8f9395;
 }

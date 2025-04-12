@@ -10,10 +10,10 @@ use dropbox_sdk::default_async_client::UserAuthDefaultClient;
 use log::{info, warn, error, debug};
 use colored::{Color, Colorize};
 use rocket::fs::FileServer;
+use rocket::futures::lock::Mutex;
 use crate::accounts::{download_accounts, AcornAccount};
 use crate::dropbox::initialize_dropbox;
 use crate::login::{handle_get_discord_auth, DiscordHandler};
-use rocket_dyn_templates::Template;
 use rocket::response::Redirect;
 use tokio::sync::RwLock;
 
@@ -80,11 +80,12 @@ async fn rocket() -> _ {
 
     let discord_handler = DiscordHandler::new(&discord_app_client_secret, accounts);
 
-    info!("Starting server at {BIND_IP}:{BIND_PORT}/");
-    rocket::build()
-        .manage(Arc::from(RwLock::from(discord_handler)))
+    let app = rocket::build()
+        .manage(discord_handler)
         .mount("/", routes![handle_index, handle_get_discord_auth])
-        .mount("/", FileServer::from(SERVE_DIR_PATH.clone()))
-        .attach(Template::fairing())
+        .mount("/", FileServer::from(SERVE_DIR_PATH.clone()));
+
+    info!("Started server at {BIND_IP}:{BIND_PORT}/");
+    app
 }
 

@@ -10,6 +10,7 @@ use serde_json::{json, Value};
 use rocket::form::FromForm;
 use rocket::State;
 use regex::Regex;
+use rocket::futures::lock::Mutex;
 use tokio::sync::RwLock;
 
 #[derive(Debug, Clone, FromForm)]
@@ -154,7 +155,7 @@ impl DiscordHandler {
         }))
     }
 
-    pub async fn handle_post_register(&mut self, register_data: Json<RegisterRequest>) -> status::Custom<Json<Value>> {
+    pub async fn handle_post_register(&self, register_data: Json<RegisterRequest>) -> status::Custom<Json<Value>> {
         static USERNAME_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9._-]+$").expect("Could not load username verification pattern"));
 
         if !USERNAME_REGEX.is_match(&register_data.username) {
@@ -210,8 +211,7 @@ pub async fn handle_get_discord_auth(handler: &State<DiscordHandler>, code: &str
     handler.handle_get_discord_auth(code).await
 }
 #[post("/register", data = "<register_data>")]
-pub async fn register(handler: &State<Arc<RwLock<DiscordHandler>>>, register_data: Json<RegisterRequest>) -> status::Custom<Json<Value>> {
-    let mut handler = handler.write().await;
+pub async fn register(handler: &State<DiscordHandler>, register_data: Json<RegisterRequest>) -> status::Custom<Json<Value>> {
     handler.handle_post_register(register_data).await
 }
 
