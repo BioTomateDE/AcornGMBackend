@@ -3,7 +3,7 @@ use std::sync::{Arc, LazyLock};
 use base64::Engine;
 use dropbox_sdk::default_async_client::UserAuthDefaultClient;
 use serde::Deserialize;
-use reqwest::{Client, StatusCode};
+use reqwest::Client;
 use rocket::http::Status;
 use crate::accounts::{upload_accounts, AcornAccount, DeviceInfo};
 use rocket::response::status;
@@ -12,17 +12,11 @@ use serde_json::{json, Value};
 use rocket::form::FromForm;
 use rocket::State;
 use regex::Regex;
-use rocket::futures::lock::Mutex;
 use rocket::response::content::RawHtml;
 use tokio::sync::RwLock;
 
-#[derive(Debug, Clone, FromForm)]
-struct DiscordAuthQuery {
-    discord_code: String,
-}
-
-
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct TokenResponse {
     access_token: String,
     token_type: String,
@@ -32,6 +26,7 @@ struct TokenResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct DiscordUserInfo {
     pub id: String,
     pub username: String,
