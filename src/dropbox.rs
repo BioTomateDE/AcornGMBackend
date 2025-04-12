@@ -26,12 +26,12 @@ pub async fn initialize_dropbox() -> UserAuthDefaultClient {
     client
 }
 
-pub async fn list_files(client: UserAuthDefaultClient, mut path: String) -> Result<ListFolderResult, String> {
+pub async fn list_files(client: &UserAuthDefaultClient, mut path: String) -> Result<ListFolderResult, String> {
     if path == "/" {
         path.clear();
     }
 
-    match files::list_folder(&client, &files::ListFolderArg::new(path.clone()).with_recursive(true)).await {
+    match files::list_folder(client, &files::ListFolderArg::new(path.clone()).with_recursive(true)).await {
         Err(error) => {
             Err(format!("Could not get files in folder {path}: {error}"))
         }
@@ -41,15 +41,11 @@ pub async fn list_files(client: UserAuthDefaultClient, mut path: String) -> Resu
     }
 }
 
-pub async fn upload_file_raw(client: UserAuthDefaultClient, path: String, data: bytes::Bytes) -> Result<(), String> {
+pub async fn upload_file_raw(client: &UserAuthDefaultClient, path: String, data: bytes::Bytes) -> Result<(), String> {
     let upload_args: UploadArg = UploadArg::new(path.clone())
         .with_client_modified(chrono::Utc::now().format(DROPBOX_TIMESTAMP_FORMAT).to_string());
 
-    match files::upload(
-        &client,
-        &upload_args,
-        data
-    ).await {
+    match files::upload(client, &upload_args, data).await {
         Err(error) => {
             Err(format!("Could not upload file with path {path}: {error}"))
         }
@@ -58,12 +54,12 @@ pub async fn upload_file_raw(client: UserAuthDefaultClient, path: String, data: 
         }
     }
 }
-pub async fn upload_file_string(client: UserAuthDefaultClient, path: String, data: String) -> Result<(), String> {
+pub async fn upload_file_string(client: &UserAuthDefaultClient, path: String, data: String) -> Result<(), String> {
     upload_file_raw(client, path, data.bytes().collect()).await
 }
 
-pub async fn download_file_raw(client: UserAuthDefaultClient, path: String) -> Result<Vec<u8>, String> {
-    match files::download(&client, &files::DownloadArg::new(path.clone()), None, None).await {
+pub async fn download_file_raw(client: &UserAuthDefaultClient, path: String) -> Result<Vec<u8>, String> {
+    match files::download(client, &files::DownloadArg::new(path.clone()), None, None).await {
         Err(error) => Err(format!("Could not download file {path}: {error}")),
         Ok(result) => {
             match result.body {
@@ -80,7 +76,7 @@ pub async fn download_file_raw(client: UserAuthDefaultClient, path: String) -> R
     }
 }
 
-pub async fn download_file_string(client: UserAuthDefaultClient, path: String) -> Result<String, String> {
+pub async fn download_file_string(client: &UserAuthDefaultClient, path: String) -> Result<String, String> {
     let bytes: Vec<u8> = download_file_raw(client, path.clone()).await?;
     let string: String = match String::from_utf8(bytes) {
         Ok(string) => string,

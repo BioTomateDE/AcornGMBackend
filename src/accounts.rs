@@ -1,16 +1,19 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use dropbox_sdk::default_async_client::UserAuthDefaultClient;
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 use crate::dropbox::{download_file_string, upload_file_string};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(crate = "rocket::serde")]
 pub struct DeviceInfo {
-    host_name: String,
-    distro_pretty: String,
-    platform_pretty: String,
-    desktop_environment_pretty: String,
-    cpu_architecture: String,
+    pub host_name: String,
+    pub distro_pretty: String,
+    pub platform_pretty: String,
+    pub desktop_environment_pretty: String,
+    pub cpu_architecture: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,8 +38,8 @@ pub struct AcornAccount {
 
 const DBX_ACCOUNTS_PATH: &'static str = "/accounts.json";
 
-pub async fn download_accounts(client: UserAuthDefaultClient) -> Result<Vec<AcornAccount>, String> {
-    let string = download_file_string(client, DBX_ACCOUNTS_PATH.to_string()).await?;
+pub async fn download_accounts(client: Arc<UserAuthDefaultClient>) -> Result<Vec<AcornAccount>, String> {
+    let string = download_file_string(client.as_ref(), DBX_ACCOUNTS_PATH.to_string()).await?;
     let accounts_json: Vec<AccountJson> = match serde_json::from_str(&string) {
         Ok(accounts) => accounts,
         Err(error) => return Err(format!("Could not parse accounts json: {error}")),
@@ -60,9 +63,11 @@ pub async fn download_accounts(client: UserAuthDefaultClient) -> Result<Vec<Acor
     Ok(accounts)
 }
 
-pub async fn upload_accounts(client: UserAuthDefaultClient, accounts: &[AcornAccount]) -> Result<(), String> {
+pub async fn upload_accounts(client: Arc<UserAuthDefaultClient>, accounts: Arc<RwLock<Vec<AcornAccount>>>) -> Result<(), String> {
+    let accounts = accounts.read().await;
+
     let mut accounts_json: Vec<AccountJson> = Vec::with_capacity(accounts.len());
-    for account in accounts {
+    for account in accounts.iter() {
         accounts_json.push(AccountJson {
             name: account.name.clone(),
             date_created: account.date_created.to_string(),
@@ -78,7 +83,7 @@ pub async fn upload_accounts(client: UserAuthDefaultClient, accounts: &[AcornAcc
         Err(error) => return Err(format!("Could not convert accounts json to string: {error}")),
     };
 
-    upload_file_string(client, DBX_ACCOUNTS_PATH.to_string(), string).await?;
+    upload_file_string(client.as_ref(), DBX_ACCOUNTS_PATH.to_string(), string).await?;
     Ok(())
 }
 

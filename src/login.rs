@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
+use base64::Engine;
+use dropbox_sdk::default_async_client::UserAuthDefaultClient;
 use serde::Deserialize;
 use reqwest::{Client, StatusCode};
 use rocket::http::Status;
-use crate::accounts::AcornAccount;
+use crate::accounts::{upload_accounts, AcornAccount, DeviceInfo};
 use rocket::response::status;
 use rocket::serde::json::Json;
 use serde_json::{json, Value};
@@ -132,19 +134,28 @@ async fn get_user_info(access_token: &str) -> Result<DiscordUserInfo, String> {
 }
 
 
-pub struct DiscordHandler {
+pub struct AccountHandler {
+    dropbox: Arc<UserAuthDefaultClient>,
     discord_app_client_secret: String,
     accounts: Arc<RwLock<Vec<AcornAccount>>>,
+    temp_login_tokens: Arc<RwLock<HashMap<String, String>>>,
 }
-impl DiscordHandler {
-    pub fn new(discord_app_client_secret: &str, accounts: Arc<RwLock<Vec<AcornAccount>>>) -> Self {
+impl AccountHandler {
+    pub fn new(
+        dropbox: Arc<UserAuthDefaultClient>,
+        discord_app_client_secret: &str,
+        accounts: Arc<RwLock<Vec<AcornAccount>>>,
+        temp_login_tokens: Arc<RwLock<HashMap<String, String>>>,
+    ) -> Self {
         Self {
+            dropbox,
             discord_app_client_secret: discord_app_client_secret.to_string(),
             accounts,
+            temp_login_tokens,
         }
     }
 
-    pub async fn api_get_discord_auth(&self, code: &str) -> status::Custom<Json<Value>> {
+    async fn api_get_discord_auth(&self, code: &str) -> status::Custom<Json<Value>> {
         // Get access/refresh tokens from OAuth2 code
         let token_response: TokenResponse = match exchange_code(&self.discord_app_client_secret, code).await {
             Ok(token_response) => token_response,
@@ -177,7 +188,7 @@ impl DiscordHandler {
         }))
     }
 
-    pub async fn api_post_register(&self, register_data: Json<RegisterRequest>) -> status::Custom<Json<Value>> {
+    async fn api_post_register(&self, register_data: Json<RegisterRequest>) -> status::Custom<Json<Value>> {
         static USERNAME_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9._-]+$").expect("Could not load username verification pattern"));
 
         if !USERNAME_REGEX.is_match(&register_data.username) {
@@ -219,30 +230,85 @@ impl DiscordHandler {
             access_tokens: HashMap::new(),
         };
 
-        let accounts_arc = self.accounts.clone();
-        let mut accounts = accounts_arc.write().await;
+        let accounts = self.accounts.clone();
+        let mut accounts = accounts.write().await;
         accounts.push(account);
+
+        // save accounts
+        if let Err(error) = upload_accounts(self.dropbox.clone(), self.accounts.clone()).await {
+            error!("!!!!!Important!!!!! Failed to upload accounts to DropBox after registering new account: {error}");
+            error!("!!!!!Important!!!!! Failed to upload accounts to DropBox after registering new account: {error}");
+            error!("!!!!!Important!!!!! Failed to upload accounts to DropBox after registering new account: {error}");
+            return respond_err(Status::InternalServerError,
+    "Could not save account! If this is a reoccurring issue, contact BioTomateDE as soon as possible.")
+        };
 
         respond_ok(json!({}))
     }
+
+    async fn api_post_temp_login(&self, temp_login_data: Json<TempLoginRequest>) -> RespType {
+        // {~~} check if account with that discord id exists
+
+        let mut temp_login_tokens = self.temp_login_tokens.write().await;
+        temp_login_tokens.insert(temp_login_data.temp_login_token.clone(), temp_login_data.discord_id.clone());
+
+        respond_ok(json!({}))
+    }
+
+    async fn api_get_access_token(&self, temp_login_token: &String, device_info: &DeviceInfo) -> RespType {
+        let temp_login_tokens = self.temp_login_tokens.read().await;
+        let discord_id: &String = match temp_login_tokens.get(temp_login_token) {
+            Some(id) => id,
+            None => return respond_err(Status::NotFound, &format!("The provided temp login token doesn't exist: {temp_login_token}")),
+        };
+
+        let mut accounts = self.accounts.write().await;
+        for account in accounts.iter_mut() {
+            if account.discord_id == *discord_id {
+                // generate access token
+                let mut buf = [0u8; 187];
+                rand::fill(&mut buf);
+                let generated_token: String = base64::prelude::BASE64_URL_SAFE.encode(buf);
+
+                // modify `accounts` vec
+                account.access_tokens.insert(generated_token.clone(), device_info.clone());
+
+                // save accounts
+                if let Err(error) = upload_accounts(self.dropbox.clone(), self.accounts.clone()).await {
+                    error!("!!!!!Important!!!!! Failed to upload accounts to DropBox after generating new access token: {error}");
+                    error!("!!!!!Important!!!!! Failed to upload accounts to DropBox after generating new access token: {error}");
+                    error!("!!!!!Important!!!!! Failed to upload accounts to DropBox after generating new access token: {error}");
+                    return respond_err(Status::InternalServerError,
+                        "Could not save account! If this is a reoccurring issue, contact BioTomateDE as soon as possible.")
+                };
+
+                return respond_ok(json!({
+                    "access_token": generated_token,
+                }))
+            }
+        }
+
+        respond_err(Status::NotFound, &format!("The provided temp login token exists, but there is no account associated with its discord id: {discord_id}"))
+    }
 }
-#[get("/discord_auth?<discord_code>")]
-pub async fn api_get_discord_auth(handler: &State<DiscordHandler>, discord_code: &str) -> RespType {
-    handler.api_get_discord_auth(discord_code).await
-}
-#[post("/register", data = "<register_data>")]
-pub async fn api_post_register(handler: &State<DiscordHandler>, register_data: Json<RegisterRequest>) -> RespType {
+#[post("/register", data="<register_data>")]
+pub async fn api_post_register(handler: &State<AccountHandler>, register_data: Json<RegisterRequest>) -> RespType {
     handler.api_post_register(register_data).await
 }
-
-#[derive(Deserialize)]
-#[serde(crate = "rocket::serde")]
-struct RegisterRequest {
-    username: String,
-    discord_user_id: String,
-    discord_refresh_token: String,
+#[get("/discord_auth?<discord_code>")]
+pub async fn api_get_discord_auth(handler: &State<AccountHandler>, discord_code: &str) -> RespType {
+    handler.api_get_discord_auth(discord_code).await
 }
 
+/// post request because json in body is easier to deal with than in params
+#[post("/access_token", data="<get_access_token_data>")]
+pub async fn api_get_access_token(handler: &State<AccountHandler>, get_access_token_data: Json<GetAccessTokenRequest>) -> RespType {
+    handler.api_get_access_token(&get_access_token_data.temp_login_token, &get_access_token_data.device_info).await
+}
+#[post("/temp_login", data="<temp_login_data>")]
+pub async fn api_post_temp_login(handler: &State<AccountHandler>, temp_login_data: Json<TempLoginRequest>) -> RespType {
+    handler.api_post_temp_login(temp_login_data).await
+}
 
 #[get("/goto_discord_auth?<temp_login_token>")]
 pub async fn redirect_get_goto_discord_auth(temp_login_token: String) -> RawHtml<String> {
@@ -267,5 +333,27 @@ pub async fn redirect_get_goto_discord_auth(temp_login_token: String) -> RawHtml
     </body>\
     </html>\
     "))
+}
+
+#[derive(Deserialize)]
+#[serde(crate = "rocket::serde")]
+struct RegisterRequest {
+    username: String,
+    discord_user_id: String,
+    discord_refresh_token: String,
+}
+
+#[derive(Deserialize)]
+#[serde(crate = "rocket::serde")]
+struct TempLoginRequest {
+    temp_login_token: String,
+    discord_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(crate = "rocket::serde")]
+struct GetAccessTokenRequest {
+    temp_login_token: String,
+    device_info: DeviceInfo,
 }
 

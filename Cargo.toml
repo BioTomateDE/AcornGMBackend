@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 rocket = { version = "0.5.1", features = ["serde_json", "json"] }
 tokio = { version = "1.44.1", features = ["full"] }
-tower-http = { version = "0.6.2", features = ["full"] }
 log = "0.4"
 flexi_logger = { version = "0.30.1", features = ["colors"] }
 dotenv = "0.15.0"
@@ -17,5 +16,6 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 colored = "3.0.0"
 reqwest = { version = "0.12.15", features = ["json"] }
-rocket_dyn_templates = "0.2.0"
 regex = "1.11.1"
+rand = "0.9.0"
+base64 = "0.22.1"

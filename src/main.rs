@@ -3,6 +3,8 @@ mod dropbox;
 mod accounts;
 
 #[macro_use] extern crate rocket;
+
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use chrono::FixedOffset;
@@ -13,7 +15,7 @@ use rocket::fs::FileServer;
 use rocket::futures::lock::Mutex;
 use crate::accounts::{download_accounts, AcornAccount};
 use crate::dropbox::initialize_dropbox;
-use crate::login::{api_get_discord_auth, api_post_register, redirect_get_goto_discord_auth, DiscordHandler};
+use crate::login::{api_get_access_token, api_get_discord_auth, api_post_register, api_post_temp_login, redirect_get_goto_discord_auth, AccountHandler};
 use rocket::response::Redirect;
 use tokio::sync::RwLock;
 
@@ -54,8 +56,8 @@ async fn rocket() -> _ {
 
 
     // get important files from dropbox
-    let dropbox_client: UserAuthDefaultClient = initialize_dropbox().await;
-    let accounts: Vec<AcornAccount> = match download_accounts(dropbox_client).await {
+    let dropbox_client: Arc<UserAuthDefaultClient> = Arc::new(initialize_dropbox().await);
+    let accounts: Vec<AcornAccount> = match download_accounts(dropbox_client.clone()).await {
         Ok(accounts) => accounts,
         Err(err) => {
             error!("Failed to load accounts from DropBox: {err}");
@@ -64,7 +66,10 @@ async fn rocket() -> _ {
     };
 
     info!("Accounts: {accounts:?}");
-    let accounts = Arc::from(RwLock::from(accounts));
+    let accounts: Arc<RwLock<Vec<AcornAccount>>> = Arc::new(RwLock::new(accounts));
+
+    /// This maps `temp_login_token`s to AcornGM account `discord_id`s
+    let temp_login_tokens: Arc<RwLock<HashMap<String, String>>> = Arc::new(RwLock::new(HashMap::new()));
 
     // get other environment variables
     let discord_app_client_secret: String = match std::env::var("DISCORD_CLIENT_SECRET") {
@@ -75,12 +80,12 @@ async fn rocket() -> _ {
         },
     };
 
-    let discord_handler = DiscordHandler::new(&discord_app_client_secret, accounts);
+    let discord_handler = AccountHandler::new(dropbox_client.clone(), &discord_app_client_secret, accounts, temp_login_tokens);
 
     rocket::build()
         .manage(discord_handler)
         .mount("/", routes![html_get_index, redirect_get_goto_discord_auth])
-        .mount("/api", routes![api_get_discord_auth, api_post_register])
+        .mount("/api", routes![api_get_discord_auth, api_post_register, api_post_temp_login, api_get_access_token])
         .mount("/", FileServer::from(SERVE_DIR_PATH.clone()))
 }
 
