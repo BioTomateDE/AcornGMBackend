@@ -90,3 +90,19 @@ input[type="submit"]:hover {
     font-size: 0.85em;
     color: #8f9395;
 }
+
+
+#register-button {
+    background-color: #4CAF50; /* Green background */
+    color: white;
+    border: none;
+    padding: 14px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.3s ease;
+}
+#register-button:hover {
+    background-color: #45a049;
+}
+

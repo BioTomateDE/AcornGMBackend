@@ -9,18 +9,19 @@
 <h1>AcornGM</h1>
 <h2>Finishing Login Process...</h2>
 <p><strong>Login Status:</strong> <span id="login-status">Waiting for script...</span></p>
-<button hidden="hidden" id="register-button" onclick="doRegister()">Login</button>
+<button hidden="hidden" id="register-button" onclick="doRegister()">Register</button>
 <script>
     function checkString(string) {
         return typeof string === 'string' && string.length >= 0
     }
     function doRegister() {
-        if (!checkString(discordRefreshToken) || !checkString(discordUserId)) return;
-        window.location.replace("/register?" + new URLSearchParams( {discordRefreshToken, discordUserId} ));
+        if (!checkString(discordRefreshToken) || !checkString(discordUserId) || !checkString(discordUsername)) return;
+        window.location.replace("/register.html?" + new URLSearchParams( {discordRefreshToken, discordUserId, discordUsername} ));
     }
 
     let discordRefreshToken = null;
     let discordUserId = null;
+    let discordUsername = null;
 
     window.onload = async () => {
         const loginStatus = document.getElementById("login-status");
@@ -44,8 +45,8 @@
                 }
             });
         } catch (error) {
-            loginStatus.innerText = `Error: Could not send request to AcornGM Server: ${error}`;
-            console.error(`Fetching /api/discord_auth failed: ${error}`);
+            loginStatus.innerText = `Error: Could not send request to AcornGM Server: ${error.message}`;
+            console.error(`Fetching /api/discord_auth failed: ${error.message}`);
             return;
         }
 
@@ -61,8 +62,8 @@
         try {
             respJson = await response.json();
         } catch (error) {
-            loginStatus.innerText = `Error: Could get JSON from response: ${error}`;
-            console.error(`Could not get JSON from response: ${error}`);
+            loginStatus.innerText = `Error: Could get JSON from response: ${error.message}`;
+            console.error(`Could not get JSON from response: ${error.message}`);
             console.warn(`Response Text: ${await response.text()}`);
             return;
         }
@@ -82,19 +83,19 @@
 
         const isNewUser = respJson['register'];    // bool
         if (isNewUser) {
-            registerButton.hidden = false;
-        } else {
             discordRefreshToken = respJson['discordRefreshToken'];
             discordUserId = respJson['discordUserId'];
-            if (!checkString(discordRefreshToken) || !checkString(discordUserId)) {
-                console.error(`Response is missing discord refresh token or user ID: ${respJson}`);
-                loginStatus.innerText = `Error: Invalid or empty response by AcornGM Server`;
+            discordUsername = respJson['discordUsername'];
+            if (!checkString(discordRefreshToken) || !checkString(discordUserId) || !checkString(discordUsername)) {
+                console.error(`Response is missing discord refresh token, user ID or username: ${respJson}`);
+                loginStatus.innerText = `Error: Invalid response by AcornGM Server`;
                 return;
             }
+            registerButton.hidden = false;
         }
 
         loginStatus.innerText = "Success";
-        console.log("Success");
+        console.log(`Success; is new user: ${isNewUser}`);
     }
 </script>
 </body>
