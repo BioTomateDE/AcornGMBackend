@@ -13,7 +13,7 @@ use rocket::fs::FileServer;
 use rocket::futures::lock::Mutex;
 use crate::accounts::{download_accounts, AcornAccount};
 use crate::dropbox::initialize_dropbox;
-use crate::login::{api_get_discord_auth, api_post_register, DiscordHandler};
+use crate::login::{api_get_discord_auth, api_post_register, redirect_get_goto_discord_auth, DiscordHandler};
 use rocket::response::Redirect;
 use tokio::sync::RwLock;
 
@@ -79,7 +79,7 @@ async fn rocket() -> _ {
 
     rocket::build()
         .manage(discord_handler)
-        .mount("/", routes![html_get_index])
+        .mount("/", routes![html_get_index, redirect_get_goto_discord_auth])
         .mount("/api", routes![api_get_discord_auth, api_post_register])
         .mount("/", FileServer::from(SERVE_DIR_PATH.clone()))
 }

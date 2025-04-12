@@ -11,6 +11,7 @@ use rocket::form::FromForm;
 use rocket::State;
 use regex::Regex;
 use rocket::futures::lock::Mutex;
+use rocket::response::content::RawHtml;
 use tokio::sync::RwLock;
 
 #[derive(Debug, Clone, FromForm)]
@@ -199,10 +200,13 @@ impl DiscordHandler {
             return respond_err(Status::Unauthorized, "The provided discord user ID does not belong to the provided discord access token!");
         }
 
-        // check if there is already an AcornGM account connected to this discord user
+        // check if there is already an AcornGM account connected to this discord user or with this username
         for account in self.accounts.clone().read().await.iter() {
             if account.discord_id == register_data.discord_user_id || account.discord_refresh_token == register_data.discord_refresh_token {
                 return respond_err(Status::Conflict, "There is already an AcornGM account connected to this discord account!");
+            }
+            if account.name.to_lowercase() == register_data.username.to_lowercase() {
+                return respond_err(Status::Conflict, "Username is already taken!");
             }
         }
 
@@ -223,11 +227,11 @@ impl DiscordHandler {
     }
 }
 #[get("/discord_auth?<discord_code>")]
-pub async fn api_get_discord_auth(handler: &State<DiscordHandler>, discord_code: &str) -> status::Custom<Json<Value>> {
+pub async fn api_get_discord_auth(handler: &State<DiscordHandler>, discord_code: &str) -> RespType {
     handler.api_get_discord_auth(discord_code).await
 }
 #[post("/register", data = "<register_data>")]
-pub async fn api_post_register(handler: &State<DiscordHandler>, register_data: Json<RegisterRequest>) -> status::Custom<Json<Value>> {
+pub async fn api_post_register(handler: &State<DiscordHandler>, register_data: Json<RegisterRequest>) -> RespType {
     handler.api_post_register(register_data).await
 }
 
@@ -238,3 +242,30 @@ struct RegisterRequest {
     discord_user_id: String,
     discord_refresh_token: String,
 }
+
+
+#[get("/goto_discord_auth?<temp_login_token>")]
+pub async fn redirect_get_goto_discord_auth(temp_login_token: String) -> RawHtml<String> {
+    const DISCORD_AUTH_URL: &'static str = "https://discord.com/oauth2/authorize\
+        ?client_id=1360325253766578479\
+        &response_type=code\
+        &redirect_uri=https%3A%2F%2Facorngm.onrender.com%2Fdiscord_auth_page.html\
+        &scope=identify";
+
+    RawHtml(format!("\
+    <!DOCTYPE html>\
+    <html>\
+    <head>\
+    <title>AcornGM</title>\
+    </head>\
+    <body>\
+    <h1>Redirecting to Discord...</h1>\
+    <script>\
+    localStorage.setItem('tempLoginToken', '{temp_login_token}');\
+    window.location.replace('{DISCORD_AUTH_URL}')\
+    </script>\
+    </body>\
+    </html>\
+    "))
+}
+
