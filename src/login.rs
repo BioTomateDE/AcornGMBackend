@@ -55,7 +55,7 @@ fn respond_ok(json: Value) -> RespType {
 
 
 const DISCORD_API_BASE_URL: &'static str = "https://discord.com/api/v10";
-const REDIRECT_URI: &'static str = "https://acorngm.onrender.com/discord_auth_redirected";
+const REDIRECT_URI: &'static str = "https://acorngm.onrender.com/discord_auth_page.html";
 const DISCORD_APP_CLIENT_ID: &'static str = "1360325253766578479";
 
 async fn get_access_token(discord_app_client_secret: &str, params: HashMap<&str, &str>) -> Result<TokenResponse, String> {
@@ -71,7 +71,7 @@ async fn get_access_token(discord_app_client_secret: &str, params: HashMap<&str,
     let status = res.status();
     if !status.is_success() {
         error!("Error while getting access token from discord - {}: {}", status, res.text().await.unwrap_or_else(|_| "<invalid response text>".to_string()));
-        return Err(format!("Could not refresh discord token because discord returned a failure response {}", status));
+        return Err(format!("Could not refresh discord token because discord returned a failure response: {}", status));
     }
 
     res.json::<TokenResponse>().await.map_err(|error| format!("Failed to parse JSON while refreshing discord token: {error}"))
@@ -106,7 +106,7 @@ async fn get_user_info(access_token: &str) -> Result<DiscordUserInfo, String> {
 
     if !status.is_success() {
         error!("Error while getting discord user info: {} - {}", status, res.text().await.unwrap_or_else(|_| "<invalid response text>".to_string()));
-        return Err(format!("Could not get discord user info because discord returned a failure response {status}"));
+        return Err(format!("Could not get discord user info because discord returned a failure response: {status}"));
     }
 
     res.json::<DiscordUserInfo>().await.map_err(|e| format!("Failed to parse JSON from discord user info response: {e}"))
@@ -124,6 +124,7 @@ impl DiscordHandler {
             accounts,
         }
     }
+
     pub async fn handle_get_discord_auth(&self, code: &str) -> status::Custom<Json<Value>> {
         // Get access/refresh tokens from OAuth2 code
         let token_response: TokenResponse = match exchange_code(&self.discord_app_client_secret, code).await {
@@ -206,12 +207,12 @@ impl DiscordHandler {
         respond_ok(json!({}))
     }
 }
-#[get("/discord_auth?<code>")]
-pub async fn handle_get_discord_auth(handler: &State<DiscordHandler>, code: &str) -> status::Custom<Json<Value>> {
+#[get("/api/discord_auth?<code>")]
+pub async fn api_get_discord_auth(handler: &State<DiscordHandler>, code: &str) -> status::Custom<Json<Value>> {
     handler.handle_get_discord_auth(code).await
 }
-#[post("/register", data = "<register_data>")]
-pub async fn register(handler: &State<DiscordHandler>, register_data: Json<RegisterRequest>) -> status::Custom<Json<Value>> {
+#[post("/api/register", data = "<register_data>")]
+pub async fn api_post_register(handler: &State<DiscordHandler>, register_data: Json<RegisterRequest>) -> status::Custom<Json<Value>> {
     handler.handle_post_register(register_data).await
 }
 

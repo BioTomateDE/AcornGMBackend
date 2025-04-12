@@ -82,7 +82,7 @@
         }
     });
 
-    form.addEventListener("submit", event => {
+    form.addEventListener("submit", async event => {
         event.preventDefault(); // Prevent the default form submission
 
         const usernameValue = usernameInput.value;
@@ -91,7 +91,10 @@
             // If validation fails on submit, still show the error message
             usernameError.style.display = "block";
             usernameInput.style.outline = "2px solid red";
-        } else {
+            return;
+        }
+
+        try {
             // If form is valid, proceed with the submission (send data)
             const requestData = {
                 discord_user_id: discordUserId,
@@ -99,29 +102,29 @@
                 username: usernameValue,
             };
 
-            fetch('/register', {
+            let resp = await fetch('/api/register', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(requestData),
             })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('Account registered successfully!');
-                    } else {
-                        alert('Error registering account: ' + data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('There was an error while registering.');
-                });
+
+            let json = await resp.json();
+
+            if (!resp.ok) {
+                console.error(`Registration failed; AcornGM API responded with ${resp.status} - ${resp.statusText}: ${json.error}`);
+                return;
+            }
+
+            // register success
+            window.location.replace("/registration_success.html");
+
+        } catch (error) {
+            alert("Registration failed!\nSee console for details.");
+            console.error(`Registration failed: ${error.message}`);
         }
     });
 </script>
 </body>
 </html>
-
-import requests~from time import sleep~while True:~ r=requests.get("https://acorngm.onrender.com/")~ print(r.status_code, r.reason, r.text)~ sleep(10)

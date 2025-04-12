@@ -13,12 +13,12 @@ use rocket::fs::FileServer;
 use rocket::futures::lock::Mutex;
 use crate::accounts::{download_accounts, AcornAccount};
 use crate::dropbox::initialize_dropbox;
-use crate::login::{handle_get_discord_auth, DiscordHandler};
+use crate::login::{api_get_discord_auth, api_post_register, DiscordHandler};
 use rocket::response::Redirect;
 use tokio::sync::RwLock;
 
 #[get("/")]
-fn handle_index() -> Redirect {
+fn html_get_index() -> Redirect {
     Redirect::to("index.html")
 }
 
@@ -82,7 +82,7 @@ async fn rocket() -> _ {
 
     let app = rocket::build()
         .manage(discord_handler)
-        .mount("/", routes![handle_index, handle_get_discord_auth])
+        .mount("/", routes![html_get_index, api_get_discord_auth, api_post_register])
         .mount("/", FileServer::from(SERVE_DIR_PATH.clone()));
 
     info!("Started server at {BIND_IP}:{BIND_PORT}/");
