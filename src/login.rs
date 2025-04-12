@@ -55,7 +55,7 @@ fn respond_ok(json: Value) -> RespType {
 
 
 const DISCORD_API_BASE_URL: &'static str = "https://discord.com/api/v10";
-const REDIRECT_URI: &'static str = "https://acorngm.onrender.com/discord_auth_redirected.html";     // irrelevant i think
+const REDIRECT_URI: &'static str = "https://acorngm.onrender.com/discord_auth_redirected";
 const DISCORD_APP_CLIENT_ID: &'static str = "1360325253766578479";
 
 async fn get_access_token(discord_app_client_secret: &str, params: HashMap<&str, &str>) -> Result<TokenResponse, String> {
