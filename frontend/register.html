@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AcornGM</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<h1>AcornGM</h1>
+<h2>Create an account</h2>
+
+<!-- Discord Username message -->
+<p id="discordMessage"></p>
+<br>
+
+<!-- Registration form -->
+<form id="registerForm">
+    <label for="username">AcornGM Username:</label><br>
+    <input type="text" id="username" name="username" required><br><br>
+
+    <!-- Error message with icon -->
+    <p id="usernameError" style="display: none;">
+        <span class="error-icon">⚠️</span>Username must contain only letters, numbers, dots, underscores, and hyphens, without spaces.
+    </p>
+
+    <input type="submit" value="Register">
+</form>
+
+<script>
+    // Function to get query parameters
+    const getQueryParam = param => {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get(param);
+    };
+
+    // Get Discord User ID and Discord Username from query params
+    const discordUserId = getQueryParam("discordUserId");
+    const discordAccessToken = getQueryParam("discordAccessToken");
+    const discordUsername = getQueryParam("discordUsername");
+
+    // Ensure all query params are set
+    if (!discordUserId || !discordAccessToken || !discordUsername) {
+        alert("Required parameters (discordUserId, discordAccessToken, discordUsername) are missing from the URL!");
+        throw new Error("Missing query parameters");
+    }
+
+    // Display the message with Discord Username
+    const discordMessage = document.getElementById("discordMessage");
+    discordMessage.innerHTML = `This will link your AcornGM account to your Discord account "${discordUsername}".`;
+
+    // Username validation for the form
+    const form = document.getElementById("registerForm");
+    const usernameInput = document.getElementById("username");
+    const usernameError = document.getElementById("usernameError");
+
+    // Function to validate the username manually without regex
+    const isValidUsername = username => {
+        // Check for invalid characters
+        const invalidCharacters = [' ', '@', '#', '$', '%', '^', '&', '*', '(', ')', '=', '+', '{', '}', '[', ']', ':', ';', '"', "'", '<', '>', ',', '.', '?', '/', '\\', '|'];
+
+        // Loop through each character in the username
+        for (let i = 0; i < username.length; i++) {
+            if (!username[i].match(/[A-Za-z0-9._\-]/)) {
+                return false; // Invalid character found
+            }
+        }
+
+        return true;
+    };
+
+    // Immediate Username validation (no throttling)
+    usernameInput.addEventListener("input", () => {
+        const usernameValue = usernameInput.value;
+
+        if (!isValidUsername(usernameValue) && usernameValue !== "") {
+            // Show the error message and input border red
+            usernameError.style.display = "block";
+            usernameInput.style.outline = "2px solid red";
+            usernameError.style.opacity = 1; // Make error text visible
+            usernameError.style.transition = "opacity 0.3s"; // Fade in error text
+        } else {
+            // Hide the error message and reset the input border
+            usernameError.style.display = "none";
+            usernameInput.style.outline = "none";
+        }
+    });
+
+    form.addEventListener("submit", event => {
+        event.preventDefault(); // Prevent the default form submission
+
+        const usernameValue = usernameInput.value;
+
+        if (!isValidUsername(usernameValue)) {
+            // If validation fails on submit, still show the error message
+            usernameError.style.display = "block";
+            usernameInput.style.outline = "2px solid red";
+        } else {
+            // If form is valid, proceed with the submission (send data)
+            const requestData = {
+                discordUserId,
+                discordAccessToken,
+                username: usernameValue,
+            };
+
+            fetch('/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData),
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Account registered successfully!');
+                    } else {
+                        alert('Error registering account: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('There was an error while registering.');
+                });
+        }
+    });
+</script>
+</body>
+</html>
