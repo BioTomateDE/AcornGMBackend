@@ -17,6 +17,7 @@ use crate::dropbox::initialize_dropbox;
 use crate::login::{handle_get_discord_auth, DiscordHandler};
 use rocket_dyn_templates::{Template, context};
 use rocket::response::Redirect;
+use rocket::yansi::Paint;
 
 #[get("/")]
 fn handle_index() -> Redirect {
@@ -68,6 +69,7 @@ async fn rocket() -> _ {
     };
 
     info!("Accounts: {accounts:?}");
+    let accounts = Arc::from(accounts);
 
     // get other environment variables
     let discord_app_client_secret: String = match std::env::var("DISCORD_CLIENT_SECRET") {
@@ -78,34 +80,13 @@ async fn rocket() -> _ {
         },
     };
 
-    let accounts = Arc::from(accounts);
-
     let discord_handler = DiscordHandler::new(&discord_app_client_secret, accounts);
 
-    info!("Server running at {BIND_IP}:{BIND_PORT}/");
+    info!("Starting server at {BIND_IP}:{BIND_PORT}/");
     rocket::build()
         .manage(discord_handler)
         .mount("/", routes![handle_index, handle_get_discord_auth])
         .mount("/", FileServer::from(SERVE_DIR_PATH.clone()))
         .attach(Template::fairing())
-
-    // let app: Router = Router::new()
-    //     .route("/", get_service(ServeFile::new(SERVE_DIR_PATH.join("index.html"))))
-    //     .route("/styles.css", get_service(ServeFile::new(SERVE_DIR_PATH.join("styles.css"))))
-    //     .route("/discord_auth_redirected", get_service(ServeFile::new(SERVE_DIR_PATH.join("discord_auth_redirected.html"))))
-    //     .route("/api/discord_auth", get(move |query| async move {
-    //         handle_get_discord_auth("gadgd", &[], query).await
-    //     }))
-    //     .layer(Extension(discord_app_client_secret))
-    //     .layer(Extension(accounts))
-    //     .fallback(|uri: Uri| not_found(uri.to_string()))
-    // ;
-    //
-    // let listener = tokio::net::TcpListener::bind(format!("{BIND_IP}:{BIND_PORT}"))
-    //     .await.expect(&format!("Could not bind to \"{BIND_IP}:{BIND_PORT}\""));
-    //
-    //
-    // axum::serve(listener, app)
-    //     .await.expect("Could not serve the http server!");
 }
 
