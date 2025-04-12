@@ -22,9 +22,6 @@ fn html_get_index() -> Redirect {
     Redirect::to("index.html")
 }
 
-
-const BIND_IP: &'static str = "0.0.0.0";
-const BIND_PORT: u16 = 8080;
 static SERVE_DIR_PATH: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|| PathBuf::from("./frontend/"));
 
 #[launch]
@@ -80,12 +77,10 @@ async fn rocket() -> _ {
 
     let discord_handler = DiscordHandler::new(&discord_app_client_secret, accounts);
 
-    let app = rocket::build()
+    rocket::build()
         .manage(discord_handler)
-        .mount("/", routes![html_get_index, api_get_discord_auth, api_post_register])
-        .mount("/", FileServer::from(SERVE_DIR_PATH.clone()));
-
-    info!("Started server at {BIND_IP}:{BIND_PORT}/");
-    app
+        .mount("/", routes![html_get_index])
+        .mount("/api", routes![api_get_discord_auth, api_post_register])
+        .mount("/", FileServer::from(SERVE_DIR_PATH.clone()))
 }
 

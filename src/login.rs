@@ -207,11 +207,11 @@ impl DiscordHandler {
         respond_ok(json!({}))
     }
 }
-#[get("/api/discord_auth?<code>")]
-pub async fn api_get_discord_auth(handler: &State<DiscordHandler>, code: &str) -> status::Custom<Json<Value>> {
-    handler.handle_get_discord_auth(code).await
+#[get("/discord_auth?<discord_code>")]
+pub async fn api_get_discord_auth(handler: &State<DiscordHandler>, discord_code: &str) -> status::Custom<Json<Value>> {
+    handler.handle_get_discord_auth(discord_code).await
 }
-#[post("/api/register", data = "<register_data>")]
+#[post("/register", data = "<register_data>")]
 pub async fn api_post_register(handler: &State<DiscordHandler>, register_data: Json<RegisterRequest>) -> status::Custom<Json<Value>> {
     handler.handle_post_register(register_data).await
 }

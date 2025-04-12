@@ -16,11 +16,8 @@
     }
     function doRegister() {
         if (!checkString(discordRefreshToken) || !checkString(discordUserId)) return;
-        window.location.replace(new URL("register", ACORNGM_API_URL) + new URLSearchParams( {discordRefreshToken, discordUserId} ));
+        window.location.replace("/register?" + new URLSearchParams( {discordRefreshToken, discordUserId} ));
     }
-
-    // const ACORNGM_API_URL = "https://acorngm.onrender.com";
-    const ACORNGM_API_URL = "http://localhost:8080";
 
     let discordRefreshToken = null;
     let discordUserId = null;
@@ -37,34 +34,67 @@
         }
 
         const query = new URLSearchParams( {discord_code: discordCode} );
-        const response = await fetch(new URL("/api/discord_auth" + query, ACORNGM_API_URL), {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        });
-
-        const resp = await response.json();     // may fail
-
-        if (!response.ok) {
-            console.error(`HTTP ${response.status} - ${response.statusText}: ${resp}`);
-            loginStatus.innerText = `Error: AcornGM Server responded with HTTP Status Code ${response.status} - ${response.statusText}: ${resp}`;
+        const url = "/api/discord_auth?" + query;
+        let response;
+        try {
+            response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+        } catch (error) {
+            loginStatus.innerText = `Error: Could not send request to AcornGM Server: ${error}`;
+            console.error(`Fetching /api/discord_auth failed: ${error}`);
             return;
         }
 
-        const isNewUser = resp['register'];    // bool
+        console.log(`Sent request to ${url}`);
+
+        if (response.status === 404) {
+            loginStatus.innerText = `Error: AcornGM Server returned 404 - Not Found`;
+            console.error(`AcornGM responded with 404 - Not Found; Response Text: ${await response.text()}`);
+            return;
+        }
+
+        let respJson;
+        try {
+            respJson = await response.json();
+        } catch (error) {
+            loginStatus.innerText = `Error: Could get JSON from response: ${error}`;
+            console.error(`Could not get JSON from response: ${error}`);
+            console.warn(`Response Text: ${await response.text()}`);
+            return;
+        }
+
+        if (response.status === 500) {
+            const errorMessage = respJson['error'];
+            loginStatus.innerText = `Internal Error: ${errorMessage}\n\nPlease contact BioTomateDE about this.`;
+            console.error(`AcornGM responded with 500 - Internal Server Error; Error Message: ${errorMessage}`);
+            return;
+        }
+
+        if (!response.ok) {
+            loginStatus.innerText = `Error: AcornGM Server responded with HTTP Status Code ${response.status} - ${response.statusText}: ${respJson['error']}`;
+            console.error(`AcornGM responded with HTTP ${response.status} - ${response.statusText}: ${respJson}`);
+            return;
+        }
+
+        const isNewUser = respJson['register'];    // bool
         if (isNewUser) {
             registerButton.hidden = false;
         } else {
-            discordRefreshToken = resp['discordRefreshToken'];
-            discordUserId = resp['discordUserId'];
+            discordRefreshToken = respJson['discordRefreshToken'];
+            discordUserId = respJson['discordUserId'];
             if (!checkString(discordRefreshToken) || !checkString(discordUserId)) {
-                console.error(`Response is missing discord refresh token or user ID: ${resp}`);
+                console.error(`Response is missing discord refresh token or user ID: ${respJson}`);
                 loginStatus.innerText = `Error: Invalid or empty response by AcornGM Server`;
                 return;
             }
         }
+
         loginStatus.innerText = "Success";
+        console.log("Success");
     }
 </script>
 </body>
