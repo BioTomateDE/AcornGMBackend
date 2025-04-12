@@ -1,14 +1,16 @@
 use std::collections::HashMap;
-use std::sync::Arc;
-use axum::extract::Query;
-use axum::{Extension, Json};
-use axum::response::IntoResponse;
 use serde::Deserialize;
 use reqwest::Client;
-use serde_json::Value;
+use rocket::http::{RawStr, Status};
 use crate::accounts::AcornAccount;
+use rocket::http::uri::Origin;
+use rocket::response::status;
+use rocket::serde::json::Json;
+use serde_json::Value;
+use rocket::form::FromForm;
+use rocket::Response;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, FromForm)]
 struct DiscordAuthQuery {
     discord_code: String,
 }
@@ -46,13 +48,14 @@ async fn get_access_token(discord_app_client_secret: &str, params: HashMap<&str,
         .await
         .map_err(|e| format!("Request failed: {e}"))?;
 
-    if !res.status().is_success() {
-        return Err(format!("Non-success response: {}", res.status()));
+    let status = res.status();
+
+    if !status.is_success() {
+        error!("Error while getting access token from discord: {}: {}", status, res.text().await.unwrap_or_else(|_| "<invalid response text>".to_string()));
+        return Err(format!("Non-success response: {}", status));
     }
 
-    res.json::<TokenResponse>()
-        .await
-        .map_err(|error| format!("Failed to parse JSON: {error}"))
+    res.json::<TokenResponse>().await.map_err(|error| format!("Failed to parse JSON: {error}"))
 }
 
 async fn exchange_code(discord_app_client_secret: &str, code: &str) -> Result<TokenResponse, String> {
@@ -84,54 +87,47 @@ async fn get_user_info(access_token: &str) -> Result<DiscordUserInfo, String> {
         return Err(format!("Non-success response: {}", res.status()));
     }
 
-    res.json::<DiscordUserInfo>()
-        .await
-        .map_err(|e| format!("Failed to parse JSON: {e}"))
+    res.json::<DiscordUserInfo>().await.map_err(|e| format!("Failed to parse JSON: {e}"))
 }
 
+#[get("/discord_auth?<code>")]
 pub async fn handle_get_discord_auth(
-    discord_app_client_secret: &str,
-    accounts: &[AcornAccount],
-    Query(params): Query<DiscordAuthQuery>,
-// ) -> (axum::http::StatusCode, Json<Value>) {
-) -> impl IntoResponse {
+    // discord_app_client_secret: &str,
+    // accounts: &[AcornAccount],
+    code: &str,
+) -> status::Custom<Json<Value>> {
+    let discord_app_client_secret = "test";
+    let accounts: Vec<AcornAccount> = vec![];
+
     // Get access/refresh tokens from OAuth2 code
-    let token_response: TokenResponse = match exchange_code(discord_app_client_secret, &params.discord_code).await {
+    let token_response: TokenResponse = match exchange_code(discord_app_client_secret, code).await {
         Ok(token_response) => token_response,
-        Err(error) => return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": format!("Error while getting discord access token: {error}")}))
-        )
+        Err(error) => return status::Custom(Status::InternalServerError, Json(serde_json::json!({
+            "error": format!("Error while getting discord access token: {error}"),
+        })))
     };
 
     // Get Discord User ID
     let user_info: DiscordUserInfo = match get_user_info(&token_response.access_token).await {
         Ok(user_info) => user_info,
-        Err(error) => return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": format!("Error while getting discord user info: {error}")}))
-        )
+        Err(error) => return status::Custom(Status::InternalServerError, Json(serde_json::json!({
+            "error": format!("Error while getting discord user info: {error}"),
+        })))
     };
 
     // check if account already exists; if it does, return acorn access token
     for account in accounts {
         if account.discord_id != user_info.id { continue }
-        return (
-            axum::http::StatusCode::OK,
-            Json(serde_json::json!({
-                "register": true,
-            }))
-        )
+        return status::Custom(Status::Ok, Json(serde_json::json!({
+            "register": true,
+        })))
     }
 
     // account does not exist; let client register
-    (
-        axum::http::StatusCode::OK,
-        Json(serde_json::json!({
-            "register": false,
-            "discordAccessToken": token_response.access_token,
-            "discordUserId": user_info.id,
-        }))
-    )
+    status::Custom(Status::Ok, Json(serde_json::json!({
+        "register": false,
+        "discordAccessToken": token_response.access_token,
+        "discordUserId": user_info.id,
+    })))
 }
 
