@@ -296,7 +296,7 @@ pub async fn api_get_discord_auth(handler: &State<AccountHandler>, discord_code:
 }
 
 /// post request because json in body is easier to deal with than in params
-#[post("/access_token", data="<get_access_token_data>")]
+#[post("/access_token", format="json", data="<get_access_token_data>")]
 pub async fn api_get_access_token(handler: &State<AccountHandler>, get_access_token_data: Json<GetAccessTokenRequest>) -> RespType {
     handler.api_get_access_token(&get_access_token_data.temp_login_token, &get_access_token_data.device_info).await
 }
