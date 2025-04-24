@@ -80,17 +80,25 @@ async fn get_access_token(discord_app_client_secret: &str, params: HashMap<&str,
         .map_err(|e| (Status::InternalServerError, format!("Request failed: {e}")))?;
 
     let status = res.status();
+    let body: String = res.text().await
+        .map_err(|e| {
+            error!("Could not get text from response body while getting discord access token: {e}",);
+            (Status::InternalServerError, format!("Could not get text from response body: {e}"))
+        })?;
+    
     if !status.is_success() {
         // check if code is invalid; because if it is, the error is the client's fault
-        let text: String = res.text().await.unwrap_or_else(|_| "<invalid response text>".to_string());
-        if text.contains("Invalid \\\"code\\\" in request") {
+        if body.contains("Invalid \\\"code\\\" in request") {
             return Err((Status::Unauthorized, "Could not refresh discord token because the provided code is invalid".to_string()));
         }
-        error!("Error while getting access token from discord - {}: {}", status, text);
+        error!("Error while getting access token from discord - {}: {}", status, body);
         return Err((Status::InternalServerError, format!("Could not refresh discord token because discord returned a failure response: {}", status)));
     }
 
-    res.json::<TokenResponse>().await.map_err(|error| (Status::InternalServerError, format!("Failed to parse JSON while refreshing discord token: {error}")))
+    serde_json::from_str::<TokenResponse>(&body).map_err(|e| (Status::InternalServerError, {
+        error!("Failed to parse JSON while refreshing discord token: {e}\nRaw response text: {body}");
+        format!("Failed to parse JSON while refreshing discord token: {e}")
+    }))
 }
 
 async fn exchange_code(discord_app_client_secret: &str, code: &str) -> Result<TokenResponse, (Status, String)> {
@@ -116,16 +124,30 @@ async fn get_user_info(access_token: &str) -> Result<DiscordUserInfo, String> {
         .bearer_auth(access_token)
         .send()
         .await
-        .map_err(|e| format!("Could not request discord user info: {e}"))?;
+        .map_err(|e| {
+            error!("Could not request discord user info for discord access \
+            token \"{}...\": {e}", access_token.get(0..6).unwrap_or(access_token));
+            format!("Could not request discord user info: {e}")
+        })?;
 
     let status = res.status();
 
+    let body: String = res.text().await
+        .map_err(|e| {
+            error!("Could not get text from response body while getting discord user info \
+            for discord access token \"{}...\": {e}", access_token.get(0..6).unwrap_or(access_token));
+            format!("Could not get text from response body: {e}")
+        })?;
+
     if !status.is_success() {
-        error!("Error while getting discord user info: {} - {}", status, res.text().await.unwrap_or_else(|_| "<invalid response text>".to_string()));
+        error!("Error while getting discord user info: {} - {}", status, body);
         return Err(format!("Could not get discord user info because discord returned a failure response: {status}"));
     }
 
-    res.json::<DiscordUserInfo>().await.map_err(|e| format!("Failed to parse JSON from discord user info response: {e}"))
+    serde_json::from_str::<DiscordUserInfo>(&body).map_err(|e| {
+        error!("Failed to parse JSON from discord user info response: {e}\nRaw response text: {body}");
+        format!("Failed to parse JSON from discord user info response: {e}")
+    })
 }
 
 

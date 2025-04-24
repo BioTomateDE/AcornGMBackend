@@ -112,6 +112,7 @@
                 return;
             }
             registerButton.hidden = false;
+            loginStatus.innerText = "Success!\nYou can now finish registering by clicking the button above.";
         } else {
             let tempLoginToken = localStorage.getItem("tempLoginToken");
             if (!checkString(tempLoginToken)) {
@@ -124,11 +125,10 @@
                 loginStatus.innerText = "Error: Temporary Login Token is not set! This shouldn't happen if you were redirected by the AcornGM program.";
                 return;
             }
-
+            loginStatus.innerText = "Success!\nYou can safely close this tab and return to the AcornGM program.";
         }
 
-        loginStatus.innerText = "Success";
-        console.log(`Success; is new user: ${isNewUser}`);
+        console.log(`Success; is new user?: ${isNewUser}`);
     }
 </script>
 </body>
