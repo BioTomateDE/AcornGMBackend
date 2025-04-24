@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 use base64::Engine;
 use dropbox_sdk::default_async_client::UserAuthDefaultClient;
+use rand::TryRngCore;
 use serde::Deserialize;
 use reqwest::Client;
 use rocket::http::Status;
@@ -262,7 +263,10 @@ impl AccountHandler {
             if account.discord_id == *discord_id {
                 // generate access token
                 let mut buf = [0u8; 187];
-                rand::fill(&mut buf);
+                if let Err(e) = rand::rngs::OsRng.try_fill_bytes(&mut buf) {
+                    error!("Could not generate cryptographically secure random bytes for token: {e}");
+                    return respond_err(Status::InternalServerError, "Could not generate access token!")
+                };
                 let generated_token: String = base64::prelude::BASE64_URL_SAFE.encode(buf);
 
                 // modify `accounts` vec
