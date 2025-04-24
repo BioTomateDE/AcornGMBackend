@@ -27,7 +27,8 @@ static SERVE_DIR_PATH: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|
 async fn rocket() -> _ {
     dotenv::dotenv().ok();
     let logger = biologischer_log::init_logger(env!("CARGO_PKG_NAME"));
-    
+    logger.allow_module("rocket");
+
     // get important files from dropbox
     let dropbox_client: Arc<UserAuthDefaultClient> = Arc::new(initialize_dropbox().await);
     let accounts: Vec<AcornAccount> = match download_accounts(dropbox_client.clone()).await {
@@ -56,6 +57,9 @@ async fn rocket() -> _ {
     };
 
     let discord_handler = AccountHandler::new(dropbox_client.clone(), &discord_app_client_secret, accounts, temp_login_tokens);
+
+    // disallow rocket logging from this point to prevent spam
+    logger.disallow_module("rocket");
 
     rocket::build()
         .manage(discord_handler)
