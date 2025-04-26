@@ -15,17 +15,17 @@
 <br>
 
 <!-- Registration form -->
-<form id="registerForm">
+<form id="register-form">
     <label for="username">AcornGM Username:</label><br>
     <p class="username-permanent-warning">You will not be able to change this name later, so choose wisely.</p>
     <input type="text" id="username" name="username" required><br><br>
 
     <!-- Error message with icon -->
-    <p id="usernameError" style="display: none;">
+    <p id="username-error" style="display: none;">
         <span class="error-icon">⚠️</span>Username must contain only latin letters, digits, dots, underscores, and hyphens; without spaces.
     </p>
 
-    <input type="submit" value="Register">
+    <input id="register-submit" type="submit" value="Register">
 </form>
 
 <script>
@@ -51,22 +51,28 @@
     discordMessage.innerHTML = `This will link your AcornGM account to your Discord account "${discordUsername}".`;
 
     // Username validation for the form
-    const form = document.getElementById("registerForm");
+    const form = document.getElementById("register-form");
     const usernameInput = document.getElementById("username");
-    const usernameError = document.getElementById("usernameError");
+    const usernameError = document.getElementById("username-error");
+    const submitButton = document.getElementById("register-submit");
 
     // Function to validate the username manually without regex
-    const isValidUsername = username => {
+    function isValidUsername(username) {
         for (let i = 0; i < username.length; i++) {
             if (!username[i].match(/[A-Za-z0-9._\-]/)) {
                 return false; // Invalid character found
             }
         }
         return true;
-    };
+    }
 
-    const postTempLoginToken = async (tempLoginToken, discordUserId) => {
-        let resp = await fetch('/api/temp_login', {
+    function checkString(string) {
+        return typeof string === 'string' && string.length >= 0
+    }
+
+    async function postTempLoginToken(tempLoginToken, discordUserId) {
+        console.info("Sending request to post temp login token");
+        let response = await fetch('/api/temp_login', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -77,13 +83,16 @@
             }),
         })
 
-        let json = await resp.json();
-        if (!resp.ok) {
-            console.error(`Could not post temp login token; AcornGM API responded with ${resp.status} - ${resp.statusText}: ${json.error}`);
+        console.info(`Received response status ${response.status}`);
+        let resp = await response.json();
+        if (!response.ok) {
+            console.error(`Could not post temp login token; AcornGM API responded with ${response.status} - ${response.statusText}: ${resp.error}`);
+            alert(`Could not post temp login token; AcornGM API responded with ${response.status} - ${response.statusText}: ${resp.error}`);
             return false;
         }
+        console.info(`Request post temp login token success: ${resp}`);
         return true;
-    };
+    }
 
     // Immediate Username validation (no throttling)
     usernameInput.addEventListener("input", () => {
@@ -107,13 +116,23 @@
 
         const usernameValue = usernameInput.value;
 
+        console.info("Submitting form...");
         if (!isValidUsername(usernameValue)) {
             // If validation fails on submit, still show the error message
             usernameError.style.display = "block";
             usernameInput.style.outline = "2px solid red";
+            console.error("Username invalid");
             return;
         }
 
+        let tempLoginToken = localStorage.getItem("tempLoginToken");
+        if (!checkString(tempLoginToken)) {
+            console.error(`Registration failed; temp login token is not set!`);
+            alert("Registration failed; temp login token is not set!\nThis should not happen if you were redirected by the AcornGM program.");
+            return;
+        }
+
+        submitButton.enabled = false;
         try {
             // If form is valid, proceed with the submission (send data)
             const requestData = {
@@ -122,7 +141,8 @@
                 username: usernameValue,
             };
 
-            let resp = await fetch('/api/register', {
+            console.info("Sending request to register");
+            let response = await fetch('/api/register', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -130,25 +150,24 @@
                 body: JSON.stringify(requestData),
             })
 
-            let json = await resp.json();
+            console.info(`Received response status ${response.status}`);
+            let resp = await response.json();
 
-            if (!resp.ok) {
-                console.error(`Registration failed; AcornGM API responded with ${resp.status} - ${resp.statusText}: ${json.error}`);
+            if (!response.ok) {
+                console.error(`Registration failed; AcornGM API responded with ${response.status} - ${response.statusText}: ${resp['error']}`);
+                alert(`Registration failed; AcornGM API responded with ${response.status} - ${response.statusText}: ${resp['error']}`);
+                submitButton.enabled = true;
                 return;
             }
-
-            let tempLoginToken = localStorage.getItem("tempLoginToken");
-            if (!checkString(tempLoginToken)) {
-                console.error(`Registration failed; temp login token is not set!`);
-                return;
-            }
-            localStorage.removeItem("tempLoginToken");
 
             if (!await postTempLoginToken(tempLoginToken, discordUserId)) {
+                submitButton.enabled = true;
                 return;
             }
 
             // register success
+            console.info("Register success")
+            localStorage.removeItem("tempLoginToken");
             window.location.replace("/registration_success.html");
 
         } catch (error) {

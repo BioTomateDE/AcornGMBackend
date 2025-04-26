@@ -4,7 +4,7 @@ use dropbox_sdk::{
     files::ListFolderResult,
     oauth2::Authorization,
 };
-use dropbox_sdk::files::UploadArg;
+use dropbox_sdk::files::{UploadArg, WriteMode};
 use tokio_util::{
     compat::FuturesAsyncReadCompatExt,
     bytes,
@@ -43,7 +43,9 @@ pub async fn list_files(client: &UserAuthDefaultClient, mut path: String) -> Res
 
 pub async fn upload_file_raw(client: &UserAuthDefaultClient, path: String, data: bytes::Bytes) -> Result<(), String> {
     let upload_args: UploadArg = UploadArg::new(path.clone())
-        .with_client_modified(chrono::Utc::now().format(DROPBOX_TIMESTAMP_FORMAT).to_string());
+        .with_client_modified(chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string())
+        .with_mode(WriteMode::Overwrite)
+        .with_strict_conflict(false);
 
     match files::upload(client, &upload_args, data).await {
         Err(error) => {

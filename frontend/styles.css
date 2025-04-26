@@ -71,7 +71,7 @@ input[type="submit"]:hover {
     background-color: #2980b9;
 }
 
-#usernameError {
+#username-error {
     font-size: 14px;
     color: red;
     margin-top: -8px; /* Reduced space between input and error */

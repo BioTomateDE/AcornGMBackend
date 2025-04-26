@@ -10,7 +10,7 @@
 <h2>Finishing Login Process...</h2>
 <p><strong>Login Status:</strong> <span id="login-status">Waiting for script...</span></p>
 <button hidden="hidden" id="register-button" onclick="doRegister()">Register</button>
-<script>
+<script type="text/javascript">
     function checkString(string) {
         return typeof string === 'string' && string.length >= 0
     }
@@ -44,18 +44,21 @@
     let discordUsername = null;
 
     window.onload = async () => {
+        console.info("Running script...");
         const loginStatus = document.getElementById("login-status");
         const registerButton = document.getElementById("register-button");
 
         const urlParams = new URLSearchParams(window.location.search);
         const discordCode = urlParams.get('code');
         if (!checkString(discordCode)) {
+            console.error("Discord authorization code missing from URL query!");
             loginStatus.innerText = "Discord authorization code missing! This shouldn't happen if you were redirected by Discord.";
             return;
         }
 
         const query = new URLSearchParams( {discord_code: discordCode} );
         const url = "/api/discord_auth?" + query;
+        console.info(`Sending discord auth request to ${url}`)
         let response;
         try {
             response = await fetch(url, {
@@ -65,12 +68,12 @@
                 }
             });
         } catch (error) {
-            loginStatus.innerText = `Error: Could not send request to AcornGM Server: ${error.message}`;
             console.error(`Fetching /api/discord_auth failed: ${error.message}`);
+            loginStatus.innerText = `Error: Could not send request to AcornGM Server: ${error.message}`;
             return;
         }
 
-        console.log(`Sent request to ${url}`);
+        console.info(`Received response ${response.status}`);
 
         if (response.status === 404) {
             loginStatus.innerText = `Error: AcornGM Server returned 404 - Not Found`;
@@ -78,6 +81,7 @@
             return;
         }
 
+        console.info("Getting response json");
         let respJson;
         try {
             respJson = await response.json();
@@ -97,10 +101,11 @@
 
         if (!response.ok) {
             loginStatus.innerText = `Error: AcornGM Server responded with HTTP Status Code ${response.status} - ${response.statusText}: ${respJson['error']}`;
-            console.error(`AcornGM responded with HTTP ${response.status} - ${response.statusText}: ${respJson}`);
+            console.error(`AcornGM responded with HTTP ${response.status} - ${response.statusText}: ${respJson["error"]}`);
             return;
         }
 
+        console.info("Response ok");
         const isNewUser = respJson['register'];    // bool
         if (isNewUser) {
             discordRefreshToken = respJson['discordRefreshToken'];
@@ -117,18 +122,19 @@
             let tempLoginToken = localStorage.getItem("tempLoginToken");
             if (!checkString(tempLoginToken)) {
                 console.error(`Temp login token is not set!`);
+                loginStatus.innerText = "Error: Temporary Login Token is not set! This shouldn't happen if you were redirected by the AcornGM program.";
                 return;
             }
             localStorage.removeItem("tempLoginToken");
 
             if (!await postTempLoginToken(tempLoginToken, discordUserId)) {
-                loginStatus.innerText = "Error: Temporary Login Token is not set! This shouldn't happen if you were redirected by the AcornGM program.";
+                loginStatus.innerText = "Error: Could not post temporary login token to server (details in console)";
                 return;
             }
             loginStatus.innerText = "Success!\nYou can safely close this tab and return to the AcornGM program.";
         }
 
-        console.log(`Success; is new user?: ${isNewUser}`);
+        console.info(`Success; is new user?: ${isNewUser}`);
     }
 </script>
 </body>

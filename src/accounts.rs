@@ -21,7 +21,6 @@ pub struct AccountJson {
     name: String,
     date_created: String,      // will be converted to chrono timestamp later
     discord_id: String,
-    discord_refresh_token: String,
     access_tokens: HashMap<String, DeviceInfo>,
 }
 
@@ -30,7 +29,6 @@ pub struct AcornAccount {
     pub name: String,
     pub date_created: chrono::DateTime<chrono::Utc>,
     pub discord_id: String,
-    pub discord_refresh_token: String,
     pub access_tokens: HashMap<String, DeviceInfo>,
 }
 
@@ -54,7 +52,6 @@ pub async fn download_accounts(client: Arc<UserAuthDefaultClient>) -> Result<Vec
             name: account_json.name,
             date_created,
             discord_id: account_json.discord_id,
-            discord_refresh_token: account_json.discord_refresh_token,
             access_tokens: account_json.access_tokens,
         })
     }
@@ -64,6 +61,7 @@ pub async fn download_accounts(client: Arc<UserAuthDefaultClient>) -> Result<Vec
 
 pub async fn upload_accounts(client: Arc<UserAuthDefaultClient>, accounts: Arc<RwLock<Vec<AcornAccount>>>) -> Result<(), String> {
     let accounts = accounts.read().await;
+    info!("Trying to save {} accounts to DropBox", accounts.len());
 
     let mut accounts_json: Vec<AccountJson> = Vec::with_capacity(accounts.len());
     for account in accounts.iter() {
@@ -71,7 +69,6 @@ pub async fn upload_accounts(client: Arc<UserAuthDefaultClient>, accounts: Arc<R
             name: account.name.clone(),
             date_created: account.date_created.to_string(),
             discord_id: account.discord_id.clone(),
-            discord_refresh_token: account.discord_refresh_token.clone(),
             access_tokens: account.access_tokens.clone(),
         });
     }

@@ -25,9 +25,10 @@ static SERVE_DIR_PATH: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|
 
 #[launch]
 async fn rocket() -> _ {
+    println!("Main function started");
     dotenv::dotenv().ok();
-    let logger = biologischer_log::init_logger(env!("CARGO_PKG_NAME"));
-    logger.allow_module("rocket");
+    let logger = biologischer_log::init_logger(env!("CARGO_CRATE_NAME"));
+    info!("Logger initialized");
 
     // get important files from dropbox
     let dropbox_client: Arc<UserAuthDefaultClient> = Arc::new(initialize_dropbox().await);
@@ -40,7 +41,7 @@ async fn rocket() -> _ {
         },
     };
 
-    info!("Accounts: {accounts:?}");
+    info!("Dropbox accounts: {accounts:?}");    // debug feature
     let accounts: Arc<RwLock<Vec<AcornAccount>>> = Arc::new(RwLock::new(accounts));
 
     // This maps `temp_login_token`s to AcornGM account `discord_id`s
@@ -58,13 +59,10 @@ async fn rocket() -> _ {
 
     let discord_handler = AccountHandler::new(dropbox_client.clone(), &discord_app_client_secret, accounts, temp_login_tokens);
 
-    // disallow rocket logging from this point to prevent spam
-    logger.disallow_module("rocket");
-
+    info!("Starting rocket");
     rocket::build()
         .manage(discord_handler)
         .mount("/", routes![html_get_index, redirect_get_goto_discord_auth])
         .mount("/api", routes![api_get_discord_auth, api_post_register, api_post_temp_login, api_get_access_token])
         .mount("/", FileServer::from(SERVE_DIR_PATH.clone()))
 }
-

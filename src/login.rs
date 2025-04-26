@@ -91,6 +91,9 @@ async fn get_access_token(discord_app_client_secret: &str, params: HashMap<&str,
         if body.contains("Invalid \\\"code\\\" in request") {
             return Err((Status::Unauthorized, "Could not refresh discord token because the provided code is invalid".to_string()));
         }
+        if body.contains("invalid_grant") {
+            return Err((Status::Unauthorized, "Could not refresh discord token because the provided discord refresh token is invalid or already used".to_string()));
+        }
         error!("Error while getting access token from discord - {}: {}", status, body);
         return Err((Status::InternalServerError, format!("Could not refresh discord token because discord returned a failure response: {}", status)));
     }
@@ -187,9 +190,11 @@ impl AccountHandler {
             Err(error) => return respond_err(Status::InternalServerError, &format!("Error while getting discord user info: {error}")),
         };
 
-        // check if account already exists; if it does, return acorn access token
+        // check if account already exists
         for account in self.accounts.clone().read().await.iter() {
             if account.discord_id == user_info.id {
+                info!("Got discord auth for existing user {} with code \"{}\": \
+                    Discord ID: {}; Discord Username: {}", account.name, code, user_info.id, user_info.username);
                 return respond_ok(json!({
                     "register": false,
                 }));
@@ -197,6 +202,8 @@ impl AccountHandler {
         }
 
         // account does not exist; let client register
+        info!("Got discord auth for new user with code \"{}\": \
+            Discord ID: {}; Discord Username: {}", code, user_info.id, user_info.username);
         respond_ok(json!({
             "register": true,
             "discordRefreshToken": token_response.refresh_token,
@@ -220,7 +227,7 @@ impl AccountHandler {
         };
 
         let user_info: DiscordUserInfo = match get_user_info(&token_response.access_token).await {
-            Ok(token) => token,
+            Ok(info) => info,
             Err(e) => return respond_err(Status::Unauthorized, &e),
         };
 
@@ -230,7 +237,7 @@ impl AccountHandler {
 
         // check if there is already an AcornGM account connected to this discord user or with this username
         for account in self.accounts.clone().read().await.iter() {
-            if account.discord_id == register_data.discord_user_id || account.discord_refresh_token == register_data.discord_refresh_token {
+            if account.discord_id == register_data.discord_user_id {
                 return respond_err(Status::Conflict, "There is already an AcornGM account connected to this discord account!");
             }
             if account.name.to_lowercase() == register_data.username.to_lowercase() {
@@ -243,23 +250,24 @@ impl AccountHandler {
             name: register_data.username.clone(),
             date_created: chrono::Utc::now(),
             discord_id: register_data.discord_user_id.clone(),
-            discord_refresh_token: register_data.discord_refresh_token.clone(),
             access_tokens: HashMap::new(),
         };
 
-        let accounts = self.accounts.clone();
-        let mut accounts = accounts.write().await;
-        accounts.push(account);
+        info!("Updating accounts: {account:?}");
+        let accounts_arc =  self.accounts.clone();
+        let mut accounts_guard = accounts_arc.write().await;
+        accounts_guard.push(account);
+        drop(accounts_guard);
 
         // save accounts
+        info!("Uploading accounts...");
         if let Err(error) = upload_accounts(self.dropbox.clone(), self.accounts.clone()).await {
-            error!("!!!!!Important!!!!! Failed to upload accounts to DropBox after registering new account: {error}");
-            error!("!!!!!Important!!!!! Failed to upload accounts to DropBox after registering new account: {error}");
-            error!("!!!!!Important!!!!! Failed to upload accounts to DropBox after registering new account: {error}");
+            for _ in 0..3 { error!("!!!!!Important!!!!! Failed to upload accounts to DropBox after registering new account ({}): {error}", register_data.username) }
             return respond_err(Status::InternalServerError,
     "Could not save account! If this is a reoccurring issue, contact BioTomateDE as soon as possible.")
         };
 
+        info!("User {} with Discord ID {} registered successfully.", register_data.username, register_data.discord_user_id);
         respond_ok(json!({}))
     }
 
@@ -295,13 +303,12 @@ impl AccountHandler {
 
                 // save accounts
                 if let Err(error) = upload_accounts(self.dropbox.clone(), self.accounts.clone()).await {
-                    error!("!!!!!Important!!!!! Failed to upload accounts to DropBox after generating new access token: {error}");
-                    error!("!!!!!Important!!!!! Failed to upload accounts to DropBox after generating new access token: {error}");
-                    error!("!!!!!Important!!!!! Failed to upload accounts to DropBox after generating new access token: {error}");
+                    for _ in 0..3 { error!("!!!!!Important!!!!! Failed to upload accounts to DropBox after generating new access token: {error}") }
                     return respond_err(Status::InternalServerError,
                         "Could not save account! If this is a reoccurring issue, contact BioTomateDE as soon as possible.")
                 };
 
+                info!("User {} signed in on {}", account.name, device_info.distro_pretty);
                 return respond_ok(json!({
                     "access_token": generated_token,
                 }))
