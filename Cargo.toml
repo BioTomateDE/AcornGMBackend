@@ -7,8 +7,8 @@ edition = "2024"
 rocket = { version = "0.5.1", features = ["serde_json", "json"] }
 tokio = { version = "1.44.1", features = ["full"] }
 log = "0.4"
-biologischer-log = { path = "../biologischer-log" }
-#biologischer-log = { git = "https://github.com/BioTomateDE/rust-biologischer-log" }
+#biologischer-log = { path = "../biologischer-log" }
+biologischer-log = { git = "https://github.com/BioTomateDE/rust-biologischer-log" }
 dotenv = "0.15.0"
 chrono = "0.4.40"
 dropbox-sdk = { version = "0.19.1", features = ["async_routes", "default_async_client"] }
