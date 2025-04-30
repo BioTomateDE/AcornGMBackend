@@ -20,20 +20,28 @@
     }
 
     async function postTempLoginToken(tempLoginToken, discordUserId) {
-        let resp = await fetch('/api/temp_login', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                temp_login_token: tempLoginToken,
-                discord_id: discordUserId
-            }),
-        })
+        console.info(`--tempLoginToken (${typeof tempLoginToken}): ${tempLoginToken}`);
+        console.info(`--discordUserId (${typeof discordUserId}): ${discordUserId}`);
 
-        let json = await resp.json();
-        if (!resp.ok) {
-            console.error(`Could not post temp login token; AcornGM API responded with ${resp.status} - ${resp.statusText}: ${json.error}`);
+        try {
+            let resp = await fetch('/api/temp_login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    temp_login_token: tempLoginToken,
+                    discord_id: discordUserId
+                }),
+            })
+
+            let json = await resp.json();
+            if (!resp.ok) {
+                console.error(`Could not post temp login token; AcornGM API responded with ${resp.status} - ${resp.statusText}: ${json.error}`);
+                return false;
+            }
+        } catch (error) {
+            console.error(`Error while posting temp login token: ${error}`);
             return false;
         }
         return true;
