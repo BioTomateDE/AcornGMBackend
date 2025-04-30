@@ -195,6 +195,7 @@ impl AccountHandler {
         info!("Got user info for code \"{code}\"; username: \"{}\", displayname: \"{}\"", user_info.username, user_info.global_name);
         // check if account already exists
         let accounts = self.accounts.read().await;
+        info!("Acquired Accounts lock");
         for account in accounts.iter() {
             if account.discord_id == user_info.id {
                 info!("Got discord auth for existing user \"{}\" with code \"{}\": \
