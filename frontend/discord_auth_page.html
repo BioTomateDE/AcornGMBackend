@@ -19,9 +19,9 @@
         window.location.replace("/register.html?" + new URLSearchParams( {discordRefreshToken, discordUserId, discordUsername} ));
     }
 
-    async function postTempLoginToken(tempLoginToken, discordUserId) {
+    async function postTempLoginToken(tempLoginToken, myDiscordUserId) {
         console.info(`--tempLoginToken (${typeof tempLoginToken}): ${tempLoginToken}`);
-        console.info(`--discordUserId (${typeof discordUserId}): ${discordUserId}`);
+        console.info(`--myDiscordUserId (${typeof myDiscordUserId}): ${myDiscordUserId}`);
 
         try {
             let resp = await fetch('/api/temp_login', {
@@ -31,7 +31,7 @@
                 },
                 body: JSON.stringify({
                     temp_login_token: tempLoginToken,
-                    discord_id: discordUserId
+                    discord_id: myDiscordUserId
                 }),
             })
 
@@ -115,7 +115,10 @@
 
         console.info("Response ok");
         const isNewUser = respJson['register'];    // bool
-        discordUserId = respJson['discordUserId'];
+        const myDiscordUserId = respJson['discordUserId'];
+        discordUserId = myDiscordUserId;
+        console.info(`isNewUser: ${isNewUser}, discordUserId: ${myDiscordUserId}`);
+
         if (isNewUser) {
             discordRefreshToken = respJson['discordRefreshToken'];
             discordUsername = respJson['discordUsername'];
@@ -135,14 +138,14 @@
             }
             localStorage.removeItem("tempLoginToken");
 
-            if (!await postTempLoginToken(tempLoginToken, discordUserId)) {
+            if (!await postTempLoginToken(tempLoginToken, myDiscordUserId)) {
                 loginStatus.innerText = "Error: Could not post temporary login token to server (details in console)";
                 return;
             }
             loginStatus.innerText = "Success!\nYou can safely close this tab and return to the AcornGM program.";
         }
 
-        console.info(`Success; is new user?: ${isNewUser}`);
+        console.info(`Success.`);
     }
 </script>
 </body>
