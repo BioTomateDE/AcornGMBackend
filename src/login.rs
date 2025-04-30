@@ -66,7 +66,7 @@ fn respond_ok(json_response: Value) -> RespType {
 
 
 const DISCORD_API_BASE_URL: &'static str = "https://discord.com/api/v10";
-const REDIRECT_URI: &'static str = "https://acorngm.onrender.com/discord_auth_page.html";
+const REDIRECT_URI: &'static str = "https://acorngm.biotomatede.hackclub.app/discord_auth_page.html";
 const DISCORD_APP_CLIENT_ID: &'static str = "1360325253766578479";
 
 async fn get_access_token(discord_app_client_secret: &str, params: HashMap<&str, &str>) -> Result<TokenResponse, (Status, String)> {
@@ -342,7 +342,7 @@ pub async fn redirect_get_goto_discord_auth(temp_login_token: String) -> RawHtml
     const DISCORD_AUTH_URL: &'static str = "https://discord.com/oauth2/authorize\
         ?client_id=1360325253766578479\
         &response_type=code\
-        &redirect_uri=https%3A%2F%2Facorngm.onrender.com%2Fdiscord_auth_page.html\
+        &redirect_uri=https%3A%2F%2Facorngm.biotomatede.hackclub.app%2Fdiscord_auth_page.html\
         &scope=identify";
 
     RawHtml(format!("\

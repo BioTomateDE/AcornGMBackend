@@ -61,6 +61,7 @@ async fn rocket() -> _ {
 
     info!("Starting rocket");
     rocket::build()
+        .configure(rocket::Config::figment().merge(("port", 24187)))
         .manage(discord_handler)
         .mount("/", routes![html_get_index, redirect_get_goto_discord_auth])
         .mount("/api", routes![api_get_discord_auth, api_post_register, api_post_temp_login, api_get_access_token])
