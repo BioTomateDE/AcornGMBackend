@@ -197,6 +197,7 @@ impl AccountHandler {
                     Discord ID: {}; Discord Username: {}", account.name, code, user_info.id, user_info.username);
                 return respond_ok(json!({
                     "register": false,
+                    "discordUserId": user_info.id,
                 }));
             }
         }
