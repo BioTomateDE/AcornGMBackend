@@ -115,9 +115,9 @@
 
         console.info("Response ok");
         const isNewUser = respJson['register'];    // bool
+        discordUserId = respJson['discordUserId'];
         if (isNewUser) {
             discordRefreshToken = respJson['discordRefreshToken'];
-            discordUserId = respJson['discordUserId'];
             discordUsername = respJson['discordUsername'];
             if (!checkString(discordRefreshToken) || !checkString(discordUserId) || !checkString(discordUsername)) {
                 console.error(`Response is missing discord refresh token, user ID or username: ${respJson}`);
