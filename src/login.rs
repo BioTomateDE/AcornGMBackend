@@ -194,7 +194,8 @@ impl AccountHandler {
 
         info!("Got user info for code \"{code}\"; username: \"{}\", displayname: \"{}\"", user_info.username, user_info.global_name);
         // check if account already exists
-        for account in self.accounts.clone().read().await.iter() {
+        let accounts = self.accounts.read().await;
+        for account in accounts.iter() {
             if account.discord_id == user_info.id {
                 info!("Got discord auth for existing user \"{}\" with code \"{}\": \
                        Discord ID: {}; Discord Username: \"{}\"", account.name, code, user_info.id, user_info.username);
@@ -205,6 +206,7 @@ impl AccountHandler {
                 }));
             }
         }
+        drop(accounts);
 
         // account does not exist; let client register
         info!("Got discord auth for new user with code \"{}\": \
