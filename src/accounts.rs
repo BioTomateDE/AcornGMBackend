@@ -60,11 +60,11 @@ pub async fn download_accounts(client: Arc<UserAuthDefaultClient>) -> Result<Vec
 }
 
 pub async fn upload_accounts(client: Arc<UserAuthDefaultClient>, accounts: Arc<RwLock<Vec<AcornAccount>>>) -> Result<(), String> {
-    let accounts = accounts.read().await;
-    info!("Trying to save {} accounts to DropBox", accounts.len());
+    let accounts_guard = accounts.read().await;
+    info!("Trying to save {} accounts to DropBox", accounts_guard.len());
 
-    let mut accounts_json: Vec<AccountJson> = Vec::with_capacity(accounts.len());
-    for account in accounts.iter() {
+    let mut accounts_json: Vec<AccountJson> = Vec::with_capacity(accounts_guard.len());
+    for account in accounts_guard.iter() {
         accounts_json.push(AccountJson {
             name: account.name.clone(),
             date_created: account.date_created.to_string(),
@@ -72,6 +72,7 @@ pub async fn upload_accounts(client: Arc<UserAuthDefaultClient>, accounts: Arc<R
             access_tokens: account.access_tokens.clone(),
         });
     }
+    drop(accounts_guard);
 
     let json_value: serde_json::Value = serde_json::json!(accounts_json);
     let string: String = match serde_json::to_string(&json_value) {

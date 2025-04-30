@@ -194,9 +194,8 @@ impl AccountHandler {
 
         info!("Got user info for code \"{code}\"; username: \"{}\", displayname: \"{}\"", user_info.username, user_info.global_name);
         // check if account already exists
-        let accounts = self.accounts.read().await;
-        info!("Acquired Accounts lock");
-        for account in accounts.iter() {
+        let accounts_guard = self.accounts.read().await;
+        for account in accounts_guard.iter() {
             if account.discord_id == user_info.id {
                 info!("Got discord auth for existing user \"{}\" with code \"{}\": \
                        Discord ID: {}; Discord Username: \"{}\"", account.name, code, user_info.id, user_info.username);
@@ -207,7 +206,7 @@ impl AccountHandler {
                 }));
             }
         }
-        drop(accounts);
+        drop(accounts_guard);
 
         // account does not exist; let client register
         info!("Got discord auth for new user with code \"{}\": \
@@ -248,7 +247,8 @@ impl AccountHandler {
 
         // check if there is already an AcornGM account connected to this discord user or with this username
         info!("Got discord user info for discord user id {}: username: \"{}\", displayname: \"{}\"", register_data.discord_user_id, user_info.username, user_info.global_name);
-        for account in self.accounts.clone().read().await.iter() {
+        let accounts_guard = self.accounts.read().await;
+        for account in accounts_guard.iter() {
             if account.discord_id == register_data.discord_user_id {
                 return respond_err(Status::Conflict, "There is already an AcornGM account connected to this discord account!");
             }
@@ -256,6 +256,7 @@ impl AccountHandler {
                 return respond_err(Status::Conflict, "Username is already taken!");
             }
         }
+        drop(accounts_guard);
 
         // success; add to account list
         info!("Success, adding user with discord user id {} to account list", register_data.discord_user_id);
@@ -267,8 +268,7 @@ impl AccountHandler {
         };
 
         info!("Updating accounts: {account:?}");
-        let accounts_arc =  self.accounts.clone();
-        let mut accounts_guard = accounts_arc.write().await;
+        let mut accounts_guard = self.accounts.write().await;
         accounts_guard.push(account);
         drop(accounts_guard);
 
