@@ -194,7 +194,8 @@ impl AccountHandler {
 
         info!("Got user info for code \"{code}\"; username: \"{}\", displayname: \"{}\"", user_info.username, user_info.global_name);
         // check if account already exists
-        let accounts_guard = self.accounts.read().await;
+        let accounts_arc = self.accounts.clone();
+        let accounts_guard = accounts_arc.read().await;
         for account in accounts_guard.iter() {
             if account.discord_id == user_info.id {
                 info!("Got discord auth for existing user \"{}\" with code \"{}\": \
@@ -207,6 +208,7 @@ impl AccountHandler {
             }
         }
         drop(accounts_guard);
+        drop(accounts_arc);
 
         // account does not exist; let client register
         info!("Got discord auth for new user with code \"{}\": \
@@ -247,7 +249,8 @@ impl AccountHandler {
 
         // check if there is already an AcornGM account connected to this discord user or with this username
         info!("Got discord user info for discord user id {}: username: \"{}\", displayname: \"{}\"", register_data.discord_user_id, user_info.username, user_info.global_name);
-        let accounts_guard = self.accounts.read().await;
+        let accounts_arc = self.accounts.clone();
+        let accounts_guard = accounts_arc.read().await;
         for account in accounts_guard.iter() {
             if account.discord_id == register_data.discord_user_id {
                 return respond_err(Status::Conflict, "There is already an AcornGM account connected to this discord account!");
@@ -257,6 +260,7 @@ impl AccountHandler {
             }
         }
         drop(accounts_guard);
+        drop(accounts_arc);
 
         // success; add to account list
         info!("Success, adding user with discord user id {} to account list", register_data.discord_user_id);
@@ -268,9 +272,11 @@ impl AccountHandler {
         };
 
         info!("Updating accounts: {account:?}");
-        let mut accounts_guard = self.accounts.write().await;
+        let accounts_arc = self.accounts.clone();
+        let mut accounts_guard = accounts_arc.write().await;
         accounts_guard.push(account);
         drop(accounts_guard);
+        drop(accounts_arc);
 
         // save accounts
         info!("Uploading accounts...");
@@ -307,38 +313,54 @@ impl AccountHandler {
         };
 
         info!("Found discord id {} for temp login token \"{}\"", discord_id, temp_login_token);
-        let mut accounts = self.accounts.write().await;
-        for account in accounts.iter_mut() {
+        let accounts_arc = self.accounts.clone();
+        let mut accounts_guard = accounts_arc.write().await;
+        let mut acorn_account: Option<&mut AcornAccount> = None;
+        for account in accounts_guard.iter_mut() {
             if account.discord_id == *discord_id {
-                // generate access token
-                let mut buf = [0u8; 187];
-                if let Err(e) = rand::rngs::OsRng.try_fill_bytes(&mut buf) {
-                    error!("Could not generate cryptographically secure random bytes for token: {e}");
-                    return respond_err(Status::InternalServerError, "Could not generate access token!")
-                };
-                let generated_token: String = base64::prelude::BASE64_URL_SAFE.encode(buf);
-
-                // modify `accounts` vec
-                account.access_tokens.insert(generated_token.clone(), device_info.clone());
-                info!("Generated and inserted access token into account data for temp login token \"{}\"", temp_login_token);
-
-                // save accounts
-                if let Err(error) = upload_accounts(self.dropbox.clone(), self.accounts.clone()).await {
-                    for _ in 0..3 { error!("!!!!!Important!!!!! Failed to upload accounts to DropBox after generating new access token: {error}") }
-                    return respond_err(Status::InternalServerError,
-                        "Could not save account! If this is a reoccurring issue, contact BioTomateDE as soon as possible.")
-                };
-
-                info!("User {} signed in on {}", account.name, device_info.distro_pretty);
-                return respond_ok(json!({
-                    "access_token": generated_token,
-                }))
+                acorn_account = Some(account);
+                break
             }
         }
 
-        respond_err(Status::NotFound, &format!("The provided temp login token exists, but there is no account associated with its discord id: {discord_id}"))
+        // check if account exists
+        let account: &mut AcornAccount = match acorn_account {
+            Some(acc) => acc,
+            None => return respond_err(
+                Status::NotFound,
+                &format!("The provided temp login token exists, but there is no account associated with its discord id: {discord_id}")
+            )
+        };
+
+        // generate access token
+        let mut buf = [0u8; 187];
+        if let Err(e) = rand::rngs::OsRng.try_fill_bytes(&mut buf) {
+            error!("Could not generate cryptographically secure random bytes for token: {e}");
+            return respond_err(Status::InternalServerError, "Could not generate access token!")
+        };
+        let generated_token: String = base64::prelude::BASE64_URL_SAFE.encode(buf);
+
+        // modify `accounts` vec
+        account.access_tokens.insert(generated_token.clone(), device_info.clone());
+        info!("Generated and inserted access token into account data for temp login token \"{}\"", temp_login_token);
+        let account_name: String = account.name.clone();
+        drop(accounts_guard);
+        drop(accounts_arc);
+
+        // save accounts
+        if let Err(error) = upload_accounts(self.dropbox.clone(), self.accounts.clone()).await {
+            for _ in 0..3 { error!("!!!!!Important!!!!! Failed to upload accounts to DropBox after generating new access token: {error}") }
+            return respond_err(Status::InternalServerError, "Could not save account! If this is a reoccurring issue, contact BioTomateDE as soon as possible.")
+        };
+
+        // success
+        info!("User {} signed in on {}", account_name, device_info.distro_pretty);
+        respond_ok(json!({
+            "access_token": generated_token,
+        }))
     }
 }
+
 #[post("/register", data="<register_data>")]
 pub async fn api_post_register(handler: &State<AccountHandler>, register_data: Json<RegisterRequest>) -> RespType {
     handler.api_post_register(register_data).await
