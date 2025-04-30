@@ -281,21 +281,28 @@ impl AccountHandler {
     }
 
     async fn api_post_temp_login(&self, temp_login_data: Json<TempLoginRequest>) -> RespType {
+        info!("Handling `POST temp_login` with discord user id {} and temp login token \"{}\"", temp_login_data.discord_id, temp_login_data.temp_login_token);
         // {~~} check if account with that discord id exists
 
         let mut temp_login_tokens = self.temp_login_tokens.write().await;
+        let old_length: usize = temp_login_tokens.len();
         temp_login_tokens.insert(temp_login_data.temp_login_token.clone(), temp_login_data.discord_id.clone());
+        let new_length: usize = temp_login_tokens.len();
+        drop(temp_login_tokens);
+        info!("Inserted temp login token into map for discord id {}. Map Length: {old_length} -> {new_length}", temp_login_data.discord_id);
 
         respond_ok(json!({}))
     }
 
     async fn api_get_access_token(&self, temp_login_token: &String, device_info: &DeviceInfo) -> RespType {
+        info!("Handling `GET access_token` with temp login token \"{}\"", temp_login_token);
         let temp_login_tokens = self.temp_login_tokens.read().await;
         let discord_id: &String = match temp_login_tokens.get(temp_login_token) {
             Some(id) => id,
             None => return respond_err(Status::NotFound, &format!("The provided temp login token doesn't exist: {temp_login_token}")),
         };
 
+        info!("Found discord id {} for temp login token \"{}\"", discord_id, temp_login_token);
         let mut accounts = self.accounts.write().await;
         for account in accounts.iter_mut() {
             if account.discord_id == *discord_id {
@@ -309,6 +316,7 @@ impl AccountHandler {
 
                 // modify `accounts` vec
                 account.access_tokens.insert(generated_token.clone(), device_info.clone());
+                info!("Generated and inserted access token into account data for temp login token \"{}\"", temp_login_token);
 
                 // save accounts
                 if let Err(error) = upload_accounts(self.dropbox.clone(), self.accounts.clone()).await {
