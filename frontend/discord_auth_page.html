@@ -131,6 +131,7 @@
             registerButton.hidden = false;
             loginStatus.innerText = "Success!\nYou can now finish registering by clicking the button above.";
         } else {
+            const acornUsername = respJson['username'];
             let tempLoginToken = localStorage.getItem("tempLoginToken");
             if (!checkString(tempLoginToken)) {
                 console.error(`Temp login token is not set!`);
@@ -143,7 +144,7 @@
                 loginStatus.innerText = "Error: Could not post temporary login token to server (details in console)";
                 return;
             }
-            loginStatus.innerText = "Success!\nYou can safely close this tab and return to the AcornGM program.";
+            loginStatus.innerHTML = `Success! Logged in as <strong>${acornUsername}</strong>.<br>You can safely close this tab and return to the AcornGM program.`;
         }
 
         console.info(`Success.`);

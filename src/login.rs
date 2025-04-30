@@ -196,11 +196,12 @@ impl AccountHandler {
         // check if account already exists
         for account in self.accounts.clone().read().await.iter() {
             if account.discord_id == user_info.id {
-                info!("Got discord auth for existing user {} with code \"{}\": \
-                       Discord ID: {}; Discord Username: {}", account.name, code, user_info.id, user_info.username);
+                info!("Got discord auth for existing user \"{}\" with code \"{}\": \
+                       Discord ID: {}; Discord Username: \"{}\"", account.name, code, user_info.id, user_info.username);
                 return respond_ok(json!({
                     "register": false,
                     "discordUserId": user_info.id,
+                    "username": account.name,
                 }));
             }
         }
