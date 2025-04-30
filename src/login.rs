@@ -89,18 +89,18 @@ async fn get_access_token(discord_app_client_secret: &str, params: HashMap<&str,
     if !status.is_success() {
         // check if code is invalid; because if it is, the error is the client's fault
         if body.contains("Invalid \\\"code\\\" in request") {
-            return Err((Status::Unauthorized, "Could not refresh discord token because the provided code is invalid".to_string()));
+            return Err((Status::Unauthorized, "Could not get discord token because the provided code is invalid".to_string()));
         }
         if body.contains("invalid_grant") {
-            return Err((Status::Unauthorized, "Could not refresh discord token because the provided discord refresh token is invalid or already used".to_string()));
+            return Err((Status::Unauthorized, "Could not get discord token because the provided discord refresh token is invalid or already used".to_string()));
         }
         error!("Error while getting access token from discord - {}: {}", status, body);
-        return Err((Status::InternalServerError, format!("Could not refresh discord token because discord returned a failure response: {}", status)));
+        return Err((Status::InternalServerError, format!("Could not get discord token because discord returned a failure response: {}", status)));
     }
 
     serde_json::from_str::<TokenResponse>(&body).map_err(|e| (Status::InternalServerError, {
-        error!("Failed to parse JSON while refreshing discord token: {e}\nRaw response text: {body}");
-        format!("Failed to parse JSON while refreshing discord token: {e}")
+        error!("Failed to parse JSON while getting discord token: {e}\nRaw response text: {body}");
+        format!("Failed to parse JSON while getting discord token: {e}")
     }))
 }
 
@@ -177,12 +177,14 @@ impl AccountHandler {
 
     async fn api_get_discord_auth(&self, code: &str) -> status::Custom<Json<Value>> {
         // Get access/refresh tokens from OAuth2 code
+        info!("Handling `GET discord_auth` with code \"{code}\"");
         let token_response: TokenResponse = match exchange_code(&self.discord_app_client_secret, code).await {
             Ok(token_response) => token_response,
             Err((status, error)) => return status::Custom(status, Json(json!({
                 "error": format!("Error while getting discord access token: {error}"),
             })))
         };
+        info!("Exchanged code with discord for code \"{code}\"; getting discord user info");
 
         // Get Discord User ID
         let user_info: DiscordUserInfo = match get_user_info(&token_response.access_token).await {
@@ -190,11 +192,12 @@ impl AccountHandler {
             Err(error) => return respond_err(Status::InternalServerError, &format!("Error while getting discord user info: {error}")),
         };
 
+        info!("Got user info for code \"{code}\"; username: \"{}\", displayname: \"{}\"", user_info.username, user_info.global_name);
         // check if account already exists
         for account in self.accounts.clone().read().await.iter() {
             if account.discord_id == user_info.id {
                 info!("Got discord auth for existing user {} with code \"{}\": \
-                    Discord ID: {}; Discord Username: {}", account.name, code, user_info.id, user_info.username);
+                       Discord ID: {}; Discord Username: {}", account.name, code, user_info.id, user_info.username);
                 return respond_ok(json!({
                     "register": false,
                     "discordUserId": user_info.id,
@@ -204,7 +207,7 @@ impl AccountHandler {
 
         // account does not exist; let client register
         info!("Got discord auth for new user with code \"{}\": \
-            Discord ID: {}; Discord Username: {}", code, user_info.id, user_info.username);
+               Discord ID: {}; Discord Username: {}", code, user_info.id, user_info.username);
         respond_ok(json!({
             "register": true,
             "discordRefreshToken": token_response.refresh_token,
@@ -215,6 +218,7 @@ impl AccountHandler {
 
     async fn api_post_register(&self, register_data: Json<RegisterRequest>) -> status::Custom<Json<Value>> {
         static USERNAME_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9._-]+$").expect("Could not load username verification pattern"));
+        info!("Handling `POST register` with username \"{}\" and discord user id {}", register_data.username, register_data.discord_user_id);
 
         if !USERNAME_REGEX.is_match(&register_data.username) {
             return respond_err(Status::BadRequest, &("Invalid username! Username must contain only latin letters, \
@@ -222,11 +226,13 @@ impl AccountHandler {
         }
 
         // validate refresh token and discord user id
+        info!("Getting discord token for discord user id {}", register_data.discord_user_id);
         let token_response: TokenResponse = match refresh_token(&self.discord_app_client_secret, &register_data.discord_refresh_token).await {
             Ok(token) => token,
             Err((status, e)) => return respond_err(status, &e),
         };
 
+        info!("Getting discord user info for discord user id {}", register_data.discord_user_id);
         let user_info: DiscordUserInfo = match get_user_info(&token_response.access_token).await {
             Ok(info) => info,
             Err(e) => return respond_err(Status::Unauthorized, &e),
@@ -237,6 +243,7 @@ impl AccountHandler {
         }
 
         // check if there is already an AcornGM account connected to this discord user or with this username
+        info!("Got discord user info for discord user id {}: username: \"{}\", displayname: \"{}\"", register_data.discord_user_id, user_info.username, user_info.global_name);
         for account in self.accounts.clone().read().await.iter() {
             if account.discord_id == register_data.discord_user_id {
                 return respond_err(Status::Conflict, "There is already an AcornGM account connected to this discord account!");
@@ -247,6 +254,7 @@ impl AccountHandler {
         }
 
         // success; add to account list
+        info!("Success, adding user with discord user id {} to account list", register_data.discord_user_id);
         let account = AcornAccount {
             name: register_data.username.clone(),
             date_created: chrono::Utc::now(),
