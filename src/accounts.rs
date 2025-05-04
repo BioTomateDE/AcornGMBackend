@@ -9,9 +9,9 @@ use crate::dropbox::{download_file_string, upload_file_string};
 #[serde(rename_all = "camelCase")]
 #[serde(crate = "rocket::serde")]
 pub struct DeviceInfo {
-    pub distro_pretty: String,
-    pub platform_pretty: String,
-    pub desktop_environment_pretty: String,
+    pub distro: String,
+    pub platform: String,
+    pub desktop_environment: String,
     pub cpu_architecture: String,
 }
 

@@ -354,7 +354,7 @@ impl AccountHandler {
         };
 
         // success
-        info!("User {} signed in on {}", account_name, device_info.distro_pretty);
+        info!("User {} signed in on {}", account_name, device_info.distro);
         respond_ok(json!({
             "access_token": generated_token,
         }))
