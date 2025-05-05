@@ -1,9 +1,9 @@
 use std::collections::HashMap;
-use std::sync::Arc;
-use dropbox_sdk::default_async_client::UserAuthDefaultClient;
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
-use crate::dropbox::{download_file_string, upload_file_string};
+use sqlx::error::DatabaseError;
+use sqlx::PgPool;
+use sqlx::postgres::{PgDatabaseError, PgQueryResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,61 +26,126 @@ pub struct AccountJson {
 
 #[derive(Debug, Clone)]
 pub struct AcornAccount {
-    pub name: String,
-    pub date_created: chrono::DateTime<chrono::Utc>,
-    pub discord_id: String,
+    pub username: String,
+    pub discord_user_id: String,
+    pub created_at: DateTime<Utc>,
     pub access_tokens: HashMap<String, DeviceInfo>,
 }
 
 
-const DBX_ACCOUNTS_PATH: &'static str = "/accounts.json";
+pub async fn insert_account(pool: &PgPool, account: &AcornAccount) -> Result<(), String> {
+    // Insert the account row
+    sqlx::query!(
+        r#"
+        INSERT INTO accounts (username, discord_user_id, created_at)
+        VALUES ($1, $2, $3)
+        "#,
+        account.username,
+        account.discord_user_id,
+        account.created_at,
+    )
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Could not insert account row for account with username {}: {e}", account.username))?;
 
-pub async fn download_accounts(client: Arc<UserAuthDefaultClient>) -> Result<Vec<AcornAccount>, String> {
-    let string = download_file_string(client.as_ref(), DBX_ACCOUNTS_PATH.to_string()).await?;
-    let accounts_json: Vec<AccountJson> = match serde_json::from_str(&string) {
-        Ok(accounts) => accounts,
-        Err(error) => return Err(format!("Could not parse accounts json: {error}")),
-    };
+    // Insert all access_tokens
+    for (token, device_info) in &account.access_tokens {
+        let device_info_json = serde_json::to_value(device_info)
+            .map_err(|e| format!("Could not convert device info to json for account with username {}: {e}", account.username))?;
 
-    let mut accounts: Vec<AcornAccount> = Vec::with_capacity(accounts_json.len());
-    for account_json in accounts_json {
-        let date_created: chrono::DateTime<chrono::Utc> = match account_json.date_created.parse() {
-            Ok(ok) => ok,
-            Err(error) => return Err(format!("Could not parse creation datetime \"{}\" of Account \"{}\": {}", account_json.date_created, account_json.name, error)),
-        };
-        accounts.push(AcornAccount {
-            name: account_json.name,
-            date_created,
-            discord_id: account_json.discord_id,
-            access_tokens: account_json.access_tokens,
-        })
+        sqlx::query!(
+            r#"
+            INSERT INTO access_tokens (username, token, device_info)
+            VALUES ($1, $2, $3)
+            "#,
+            account.discord_user_id,
+            token,
+            device_info_json,
+        )
+            .execute(pool)
+            .await
+            .map_err(|e| format!("Could not insert access token row for account with username {}: {e}", account.username))?;
     }
 
-    Ok(accounts)
+    Ok(())
 }
 
-pub async fn upload_accounts(client: Arc<UserAuthDefaultClient>, accounts: Arc<RwLock<Vec<AcornAccount>>>) -> Result<(), String> {
-    let accounts_guard = accounts.read().await;
-    info!("Trying to save {} accounts to DropBox", accounts_guard.len());
 
-    let mut accounts_json: Vec<AccountJson> = Vec::with_capacity(accounts_guard.len());
-    for account in accounts_guard.iter() {
-        accounts_json.push(AccountJson {
-            name: account.name.clone(),
-            date_created: account.date_created.to_string(),
-            discord_id: account.discord_id.clone(),
-            access_tokens: account.access_tokens.clone(),
-        });
-    }
-    drop(accounts_guard);
+/// returns whether the temp login token already exists (-> respond 404)
+pub async fn insert_temp_login_token(pool: &PgPool, temp_login_token: &str, username: &str) -> Result<bool, String> {
+    let expires_at: DateTime<Utc> = Utc::now() + Duration::minutes(5);
 
-    let json_value: serde_json::Value = serde_json::json!(accounts_json);
-    let string: String = match serde_json::to_string(&json_value) {
-        Ok(string) => string,
-        Err(error) => return Err(format!("Could not convert accounts json to string: {error}")),
+    // Insert the account row
+    let result: Result<PgQueryResult, sqlx::Error> = sqlx::query!(
+        r#"
+        INSERT INTO temp_login_tokens (token, username, expires_at)
+        VALUES ($1, $2, $3)
+        "#,
+        temp_login_token,
+        username,
+        expires_at,
+    )
+        .execute(pool)
+        .await;
+
+    let result: sqlx::Error = match result {
+        Ok(_) => return Ok(false),
+        Err(e) => e,
     };
 
-    upload_file_string(client.as_ref(), DBX_ACCOUNTS_PATH.to_string(), string).await?;
+    let error: Box<dyn DatabaseError> = match result {
+        sqlx::Error::Database(e) => e,
+        e => return Err(format!("(generic) Could not insert temp login token row for username {username}: {e}")),
+    };
+
+    let error: &PgDatabaseError = error.downcast_ref::<PgDatabaseError>();
+    if error.code() == "23505" {    // "unique violation"; temp login token already exists
+        return Ok(true)
+    }
+
+    Err(format!("Could not insert temp login token row for username {username}: {error}"))
+}
+
+
+pub async fn delete_expired_temp_login_tokens(pool: &PgPool) -> Result<(), String> {
+    sqlx::query!("DELETE FROM temp_login_tokens WHERE expires_at < NOW()")
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("Could not delete expired temp login tokens: {e}"))?;
+    Ok(())
+}
+
+
+pub async fn temp_login_token_get_username(pool: &PgPool, temp_login_token: &str) -> Result<Option<String>, String> {
+    let result = sqlx::query!(
+        r#"
+        SELECT username FROM temp_login_tokens
+        WHERE token = $1 AND expires_at > NOW()
+        "#,
+        temp_login_token,
+    )
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| format!("Could not get username for temp login token: {e}"))?;
+
+    match result {
+        None => Ok(None),
+        Some(record) => Ok(record.username)
+    }
+}
+
+pub async fn remove_temp_login_token(pool: &PgPool, temp_login_token: &str) -> Result<(), String> {
+    sqlx::query!(
+        r#"
+        DELETE FROM temp_login_tokens
+        WHERE token = $1
+        "#,
+        temp_login_token,
+    )
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("Could not remove temp login token: {e}"))?;
+
     Ok(())
 }
 
