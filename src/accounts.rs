@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::error::DatabaseError;
@@ -7,7 +6,7 @@ use sqlx::postgres::{PgDatabaseError, PgQueryResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[serde(crate = "rocket::serde")]
+// #[serde(crate = "rocket::serde")]
 pub struct DeviceInfo {
     pub distro: String,
     pub platform: String,
@@ -15,26 +14,118 @@ pub struct DeviceInfo {
     pub cpu_architecture: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AccountJson {
-    name: String,
-    date_created: String,      // will be converted to chrono timestamp later
-    discord_id: String,
-    access_tokens: HashMap<String, DeviceInfo>,
-}
 
 #[derive(Debug, Clone)]
 pub struct AcornAccount {
     pub username: String,
     pub discord_user_id: String,
     pub created_at: DateTime<Utc>,
-    pub access_tokens: HashMap<String, DeviceInfo>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AcornAccessToken {
+    pub token: String,
+    pub username: String,
+    pub device_info: DeviceInfo,
+    pub created_at: DateTime<Utc>,
+}
+
+
+pub async fn check_if_account_exists(pool: &PgPool, username: &str) -> Result<bool, String> {
+    let result = sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS (
+            SELECT 1 FROM accounts WHERE username = $1
+        )
+        "#,
+        username
+    )
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Failed to check if account with username {username} exists: {e}"))?;
+
+    Ok(result.unwrap_or(false))
+}
+
+pub async fn check_if_account_exists_discord(pool: &PgPool, username: &str, discord_user_id: &str) -> Result<bool, String> {
+    let result = sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS (
+            SELECT 1 FROM accounts WHERE username = $1 OR discord_user_id = $2
+        )
+        "#,
+        username,
+        discord_user_id,
+    )
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Failed to check if account with username {username} exists: {e}"))?;
+
+    Ok(result.unwrap_or(false))
+}
+
+pub async fn get_account(pool: &PgPool, username: &str) -> Result<AcornAccount, String> {
+    let account: AcornAccount = sqlx::query_as!(
+        AcornAccount,
+        r#"
+        SELECT username, discord_user_id, created_at
+        FROM accounts
+        WHERE username = $1
+        "#,
+        username,
+    )
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Could not fetch account with username {username}: {e}"))?;
+    Ok(account)
+}
+
+
+pub async fn get_account_by_discord_id(pool: &PgPool, discord_user_id: &str) -> Result<Option<AcornAccount>, String> {
+    let account: Option<AcornAccount> = sqlx::query_as!(
+        AcornAccount,
+        r#"
+        SELECT username, discord_user_id, created_at
+        FROM accounts
+        WHERE discord_user_id = $1
+        "#,
+        discord_user_id,
+    )
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("Could not fetch account with discord user id {discord_user_id}: {e}"))?;
+    Ok(account)
+}
+
+
+pub async fn get_access_token(pool: &PgPool, username: &str, token: &str) -> Result<AcornAccessToken, String> {
+    let row = sqlx::query!(
+        r#"
+        SELECT token, username, device_info, created_at
+        FROM access_tokens
+        WHERE username = $1 AND token = $2
+        "#,
+        username,
+        token,
+    )
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Could not fetch access token with username {username}: {e}"))?;
+
+    let device_info: DeviceInfo = serde_json::from_value(row.device_info)
+        .map_err(|e| format!("Could not deserialize device info json: {e}"))?;
+
+    let access_token = AcornAccessToken {
+        token: row.token,
+        username: row.username,
+        device_info,
+        created_at: row.created_at,
+    };
+    Ok(access_token)
 }
 
 
 pub async fn insert_account(pool: &PgPool, account: &AcornAccount) -> Result<(), String> {
-    // Insert the account row
     sqlx::query!(
         r#"
         INSERT INTO accounts (username, discord_user_id, created_at)
@@ -47,26 +138,27 @@ pub async fn insert_account(pool: &PgPool, account: &AcornAccount) -> Result<(),
         .execute(pool)
         .await
         .map_err(|e| format!("Could not insert account row for account with username {}: {e}", account.username))?;
+    Ok(())
+}
 
-    // Insert all access_tokens
-    for (token, device_info) in &account.access_tokens {
-        let device_info_json = serde_json::to_value(device_info)
-            .map_err(|e| format!("Could not convert device info to json for account with username {}: {e}", account.username))?;
 
-        sqlx::query!(
-            r#"
-            INSERT INTO access_tokens (username, token, device_info)
-            VALUES ($1, $2, $3)
-            "#,
-            account.discord_user_id,
-            token,
-            device_info_json,
-        )
-            .execute(pool)
-            .await
-            .map_err(|e| format!("Could not insert access token row for account with username {}: {e}", account.username))?;
-    }
+pub async fn insert_access_token(pool: &PgPool, access_token: &AcornAccessToken) -> Result<(), String> {
+    let device_info_json = serde_json::to_value(&access_token.device_info)
+        .map_err(|e| format!("Could not convert device info to json for access token with username {}: {e}", access_token.username))?;
 
+    sqlx::query!(
+        r#"
+        INSERT INTO access_tokens (token, username, device_info, created_at)
+        VALUES ($1, $2, $3, $4)
+        "#,
+        access_token.username,
+        access_token.token,
+        device_info_json,
+        access_token.created_at,
+    )
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Could not insert access token row for username {}: {e}", access_token.username))?;
     Ok(())
 }
 
@@ -128,10 +220,14 @@ pub async fn temp_login_token_get_username(pool: &PgPool, temp_login_token: &str
         .await
         .map_err(|e| format!("Could not get username for temp login token: {e}"))?;
 
-    match result {
-        None => Ok(None),
-        Some(record) => Ok(record.username)
-    }
+    let record = match result {
+        None => return Ok(None),
+        Some(record) => record,
+    };
+
+    remove_temp_login_token(pool, temp_login_token).await?;
+
+    Ok(Some(record.username))
 }
 
 pub async fn remove_temp_login_token(pool: &PgPool, temp_login_token: &str) -> Result<(), String> {

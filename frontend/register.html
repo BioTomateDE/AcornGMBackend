@@ -22,7 +22,7 @@
 
     <!-- Error message with icon -->
     <p id="username-error" style="display: none;">
-        <span class="error-icon">⚠️</span>Username must contain only latin letters, digits, dots, underscores, and hyphens; without spaces.
+        <span class="error-icon">⚠️</span>Username must be 3-32 characters long and contain only latin letters, digits, underscores, and hyphens; without spaces.
     </p>
 
     <input id="register-submit" type="submit" value="Register">
@@ -58,8 +58,10 @@
 
     // Function to validate the username manually without regex
     function isValidUsername(username) {
+        if (username.length < 3 || username.length > 32) return false;
+
         for (let i = 0; i < username.length; i++) {
-            if (!username[i].match(/[A-Za-z0-9._\-]/)) {
+            if (!username[i].match(/[A-Za-z0-9_\-]/)) {
                 return false; // Invalid character found
             }
         }

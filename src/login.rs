@@ -1,11 +1,23 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use base64::Engine;
+use chrono::Utc;
 use rand::TryRngCore;
 use serde::Deserialize;
 use reqwest::Client;
 use rocket::http::Status;
-use crate::accounts::{insert_temp_login_token, temp_login_token_get_username, AcornAccount, DeviceInfo};
+use crate::accounts::{
+    check_if_account_exists,
+    check_if_account_exists_discord,
+    get_account_by_discord_id,
+    insert_access_token,
+    insert_account,
+    insert_temp_login_token,
+    temp_login_token_get_username,
+    AcornAccessToken,
+    AcornAccount,
+    DeviceInfo,
+};
 use rocket::response::status;
 use rocket::serde::json::Json;
 use serde_json::{json, Value};
@@ -191,53 +203,50 @@ impl AccountHandler {
         };
 
         info!("Got user info for code \"{code}\"; username: \"{}\", displayname: \"{}\"", user_info.username, user_info.global_name);
+
         // check if account already exists
-        // let accounts_arc = self.accounts.clone();
-        // let accounts_guard = accounts_arc.read().await;
-        // for account in accounts_guard.iter() {
-        //     if account.discord_id == user_info.id {
-        //         info!("Got discord auth for existing user \"{}\" with code \"{}\": \
-        //                Discord ID: {}; Discord Username: \"{}\"", account.name, code, user_info.id, user_info.username);
-        //         return respond_ok(json!({
-        //             "register": false,
-        //             "discordUserId": user_info.id,
-        //             "username": account.name,
-        //         }));
-        //     }
-        // }
-        // drop(accounts_guard);
-        // drop(accounts_arc);
-        /// TODO
+        let result: Result<Option<AcornAccount>, String> = get_account_by_discord_id(&self.pool, &user_info.id).await;
+        let account_maybe: Option<AcornAccount> = match result {
+            Err(e) => return respond_err(Status::InternalServerError, &e),
+            Ok(account) => account
+        };
+
+        if let Some(account) = account_maybe {
+            info!("Got discord auth for existing user {} with code \"{}\": \
+            Discord ID: {}; Discord Username: {}", account.username, code, user_info.id, user_info.username);
+
+            return respond_ok_value(json!({
+                "register": false,
+                "discordUserId": user_info.id,
+                "username": account.username,
+            }))
+        }
 
         // account does not exist; let client register
         info!("Got discord auth for new user with code \"{}\": \
-               Discord ID: {}; Discord Username: {}", code, user_info.id, user_info.username);
+        Discord ID: {}; Discord Username: {}", code, user_info.id, user_info.username);
+
         respond_ok_value(json!({
             "register": true,
-            "discordRefreshToken": token_response.refresh_token,
+            "discordAccessToken": token_response.access_token,
             "discordUserId": user_info.id,
             "discordUsername": user_info.username,
         }))
     }
 
     async fn api_post_register(&self, register_data: Json<RegisterRequest>) -> status::Custom<Json<Value>> {
-        static USERNAME_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9._-]+$").expect("Could not load username verification pattern"));
         info!("Handling `POST register` with username \"{}\" and discord user id {}", register_data.username, register_data.discord_user_id);
+        static USERNAME_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9_-]{3,32}$")
+            .expect("Could not load username verification pattern"));
 
         if !USERNAME_REGEX.is_match(&register_data.username) {
-            return respond_err(Status::BadRequest, &("Invalid username! Username must contain only latin letters, \
-            digits, dots, underscores, and hyphens; without spaces."))
+            return respond_err(Status::BadRequest, &("Invalid username! Username must be 3-32 characters long \
+            and contain only latin letters, digits, underscores, and hyphens; without spaces."))
         }
 
-        // validate refresh token and discord user id
-        info!("Getting discord token for discord user id {}", register_data.discord_user_id);
-        let token_response: TokenResponse = match refresh_token(&register_data.discord_refresh_token).await {
-            Ok(token) => token,
-            Err((status, e)) => return respond_err(status, &e),
-        };
-
+        // validate access token and discord user id
         info!("Getting discord user info for discord user id {}", register_data.discord_user_id);
-        let user_info: DiscordUserInfo = match get_user_info(&token_response.access_token).await {
+        let user_info: DiscordUserInfo = match get_user_info(&register_data.discord_access_token).await {
             Ok(info) => info,
             Err(e) => return respond_err(Status::Unauthorized, &e),
         };
@@ -248,36 +257,26 @@ impl AccountHandler {
 
         // check if there is already an AcornGM account connected to this discord user or with this username
         info!("Got discord user info for discord user id {}: username: \"{}\", displayname: \"{}\"", register_data.discord_user_id, user_info.username, user_info.global_name);
-        // let accounts_arc = self.accounts.clone();
-        // let accounts_guard = accounts_arc.read().await;
-        // for account in accounts_guard.iter() {
-        //     if account.discord_id == register_data.discord_user_id {
-        //         return respond_err(Status::Conflict, "There is already an AcornGM account connected to this discord account!");
-        //     }
-        //     if account.name.to_lowercase() == register_data.username.to_lowercase() {
-        //         return respond_err(Status::Conflict, "Username is already taken!");
-        //     }
-        // }
-        // drop(accounts_guard);
-        // drop(accounts_arc);
-        /// TODO
+        let result: Result<bool, String> = check_if_account_exists_discord(&self.pool, &register_data.username, &register_data.discord_user_id).await;
+        match result {
+            Err(e) => return respond_err(Status::InternalServerError, &e),
+            Ok(account_exists) => if account_exists {
+                return respond_err(Status::Conflict, "Account with this username or discord user id already exists!")
+            }
+        }
 
-        // success; add to account list
+        // add to account list
         info!("Success, adding user with discord user id {} to account list", register_data.discord_user_id);
         let account = AcornAccount {
             username: register_data.username.clone(),
-            created_at: chrono::Utc::now(),
             discord_user_id: register_data.discord_user_id.clone(),
-            access_tokens: HashMap::new(),
+            created_at: Utc::now(),
         };
 
-        info!("Updating accounts: {account:?}");
-        // let accounts_arc = self.accounts.clone();
-        // let mut accounts_guard = accounts_arc.write().await;
-        // accounts_guard.push(account);
-        // drop(accounts_guard);
-        // drop(accounts_arc);
-        /// TODO
+        info!("Adding account: {account:?}");
+        if let Err(e) = insert_account(&self.pool, &account).await {
+            return respond_err(Status::InternalServerError, &e)
+        }
 
         info!("User {} with Discord ID {} registered successfully.", register_data.username, register_data.discord_user_id);
         respond_ok_empty()
@@ -285,9 +284,6 @@ impl AccountHandler {
 
     async fn api_post_temp_login(&self, temp_login_data: Json<TempLoginRequest>) -> RespType {
         info!("Handling `POST temp_login` with username {} and temp login token \"{}\"", temp_login_data.username, temp_login_data.temp_login_token);
-
-        // {~~} check if account with that username exists
-
         let result: Result<bool, String> = insert_temp_login_token(&self.pool, &temp_login_data.temp_login_token, &temp_login_data.username).await;
         match result {
             Err(e) => respond_err(Status::InternalServerError, &e),
@@ -306,32 +302,20 @@ impl AccountHandler {
         let username: String = match result {
             Err(e) => return respond_err(Status::InternalServerError, &e),
             Ok(username) => match username {
-                None => return respond_err(Status::NotFound, "Could not find username for temp login token. It may have expired."),
+                None => return respond_err(Status::NotFound, "Could not find username for temp login token. \
+                It may have expired or the user has not finished logging in yet."),
                 Some(username) => username,
             }
         };
 
         info!("Found username {} for temp login token \"{}\"", username, temp_login_token);
-        // let accounts_arc = self.accounts.clone();
-        // let mut accounts_guard = accounts_arc.write().await;
-        // let mut acorn_account: Option<&mut AcornAccount> = None;
-        // for account in accounts_guard.iter_mut() {
-        //     if account.discord_id == *discord_id {
-        //         acorn_account = Some(account);
-        //         break
-        //     }
-        // }
-        //
-        // // check if account exists
-        // let account: &mut AcornAccount = match acorn_account {
-        //     Some(acc) => acc,
-        //     None => return respond_err(
-        //         Status::NotFound,
-        //         &format!("The provided temp login token exists, but there is no account associated with its discord id: {discord_id}")
-        //     )
-        // };
-        /// TODO
-        let account_name = "stub";
+        let result: Result<bool, String> = check_if_account_exists(&self.pool, &username).await;
+        match result {
+            Err(e) => return respond_err(Status::InternalServerError, &e),
+            Ok(account_exists) => if !account_exists {
+                return respond_err(Status::NotFound, &format!("Account with username \"{username}\" does not exist!"))
+            }
+        }
 
         // generate access token
         let mut buf = [0u8; 187];
@@ -341,16 +325,19 @@ impl AccountHandler {
         };
         let generated_token: String = base64::prelude::BASE64_URL_SAFE.encode(buf);
 
-        // // modify `accounts` vec
-        // account.access_tokens.insert(generated_token.clone(), device_info.clone());
-        // info!("Generated and inserted access token into account data for temp login token \"{}\"", temp_login_token);
-        // let account_name: String = account.name.clone();
-        // drop(accounts_guard);
-        // drop(accounts_arc);
-        /// TODO
+        let acorn_token = AcornAccessToken {
+            token: generated_token.clone(),
+            username: username.clone(),
+            device_info: device_info.clone(),
+            created_at: Utc::now(),
+        };
 
-        // success
-        info!("User {} signed in on {}", account_name, device_info.distro);
+        if let Err(e) = insert_access_token(&self.pool, &acorn_token).await {
+            return respond_err(Status::InternalServerError, &e)
+        }
+
+        // Success
+        info!("User {} signed in on {}", username, device_info.distro);
         respond_ok_value(json!({
             "access_token": generated_token,
         }))
@@ -406,7 +393,7 @@ pub async fn redirect_get_goto_discord_auth(temp_login_token: String) -> RawHtml
 struct RegisterRequest {
     username: String,
     discord_user_id: String,
-    discord_refresh_token: String,
+    discord_access_token: String,
 }
 
 #[derive(Deserialize)]

@@ -15,8 +15,8 @@
         return typeof string === 'string' && string.length >= 0
     }
     function doRegister() {
-        if (!checkString(discordRefreshToken) || !checkString(discordUserId) || !checkString(discordUsername)) return;
-        window.location.replace("/register.html?" + new URLSearchParams( {discordRefreshToken, discordUserId, discordUsername} ));
+        if (!checkString(discordAccessToken) || !checkString(discordUserId) || !checkString(discordUsername)) return;
+        window.location.replace("/register.html?" + new URLSearchParams( {discordAccessToken, discordUserId, discordUsername} ));
     }
 
     async function postTempLoginToken(tempLoginToken, myDiscordUserId) {
@@ -47,7 +47,7 @@
         return true;
     }
 
-    let discordRefreshToken = null;
+    let discordAccessToken = null;
     let discordUserId = null;
     let discordUsername = null;
 
@@ -121,10 +121,10 @@
         console.info(`isNewUser: ${isNewUser}, discordUserId: ${myDiscordUserId}`);
 
         if (isNewUser) {
-            discordRefreshToken = respJson['discordRefreshToken'];
+            discordAccessToken = respJson['discordAccessToken'];
             discordUsername = respJson['discordUsername'];
-            if (!checkString(discordRefreshToken) || !checkString(discordUserId) || !checkString(discordUsername)) {
-                console.error(`Response is missing discord refresh token, user ID or username: ${respJson}`);
+            if (!checkString(discordAccessToken) || !checkString(discordUserId) || !checkString(discordUsername)) {
+                console.error(`Response is missing discord access token, user ID or username: ${respJson}`);
                 loginStatus.innerText = `Error: Invalid response by AcornGM Server`;
                 return;
             }
