@@ -86,13 +86,13 @@
         })
 
         console.info(`Received response status ${response.status}`);
-        let resp = await response.json();
         if (!response.ok) {
+            let resp = await response.json();
             console.error(`Could not post temp login token; AcornGM API responded with ${response.status} - ${response.statusText}: ${resp.error}`);
             alert(`Could not post temp login token; AcornGM API responded with ${response.status} - ${response.statusText}: ${resp.error}`);
             return false;
         }
-        console.info(`Request post temp login token success: ${resp}`);
+        console.info(`Request post temp login token success: ${await response.text()}`);
         return true;
     }
 

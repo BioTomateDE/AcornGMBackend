@@ -35,8 +35,8 @@
                 }),
             })
 
-            let json = await resp.json();
             if (!resp.ok) {
+                let json = await resp.json();
                 console.error(`Could not post temp login token; AcornGM API responded with ${resp.status} - ${resp.statusText}: ${json.error}`);
                 return false;
             }
