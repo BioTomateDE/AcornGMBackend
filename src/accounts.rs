@@ -109,7 +109,7 @@ pub async fn insert_temp_login_token(pool: &PgPool, temp_login_token: &str, user
 
 pub async fn delete_expired_temp_login_tokens(pool: &PgPool) -> Result<(), String> {
     sqlx::query!("DELETE FROM temp_login_tokens WHERE expires_at < NOW()")
-        .execute(&pool)
+        .execute(pool)
         .await
         .map_err(|e| format!("Could not delete expired temp login tokens: {e}"))?;
     Ok(())
@@ -124,7 +124,7 @@ pub async fn temp_login_token_get_username(pool: &PgPool, temp_login_token: &str
         "#,
         temp_login_token,
     )
-        .fetch_optional(&pool)
+        .fetch_optional(pool)
         .await
         .map_err(|e| format!("Could not get username for temp login token: {e}"))?;
 
@@ -142,7 +142,7 @@ pub async fn remove_temp_login_token(pool: &PgPool, temp_login_token: &str) -> R
         "#,
         temp_login_token,
     )
-        .execute(&pool)
+        .execute(pool)
         .await
         .map_err(|e| format!("Could not remove temp login token: {e}"))?;
 
