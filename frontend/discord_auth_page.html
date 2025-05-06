@@ -19,9 +19,9 @@
         window.location.replace("/register.html?" + new URLSearchParams( {discordAccessToken, discordUserId, discordUsername} ));
     }
 
-    async function postTempLoginToken(tempLoginToken, myDiscordUserId) {
+    async function postTempLoginToken(tempLoginToken, username) {
         console.info(`--tempLoginToken (${typeof tempLoginToken}): ${tempLoginToken}`);
-        console.info(`--myDiscordUserId (${typeof myDiscordUserId}): ${myDiscordUserId}`);
+        console.info(`--username (${typeof username}): ${username}`);
 
         try {
             let resp = await fetch('/api/temp_login', {
@@ -31,7 +31,7 @@
                 },
                 body: JSON.stringify({
                     temp_login_token: tempLoginToken,
-                    discord_id: myDiscordUserId
+                    username: username,
                 }),
             })
 
@@ -140,7 +140,7 @@
             }
             localStorage.removeItem("tempLoginToken");
 
-            if (!await postTempLoginToken(tempLoginToken, myDiscordUserId)) {
+            if (!await postTempLoginToken(tempLoginToken, acornUsername)) {
                 loginStatus.innerText = "Error: Could not post temporary login token to server (details in console)";
                 return;
             }

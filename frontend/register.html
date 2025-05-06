@@ -72,7 +72,7 @@
         return typeof string === 'string' && string.length >= 0
     }
 
-    async function postTempLoginToken(tempLoginToken, discordUserId) {
+    async function postTempLoginToken(tempLoginToken, username) {
         console.info("Sending request to post temp login token");
         let response = await fetch('/api/temp_login', {
             method: 'POST',
@@ -81,7 +81,7 @@
             },
             body: JSON.stringify({
                 temp_login_token: tempLoginToken,
-                discord_id: discordUserId
+                username: username,
             }),
         })
 
@@ -163,7 +163,7 @@
                 return;
             }
 
-            if (!await postTempLoginToken(tempLoginToken, discordUserId)) {
+            if (!await postTempLoginToken(tempLoginToken, usernameValue)) {
                 submitButton.enabled = true;
                 return;
             }
