@@ -153,9 +153,10 @@
             })
 
             console.info(`Received response status ${response.status}`);
-            let resp = await response.json();
 
             if (!response.ok) {
+                console.info(`Raw response: ${await response.text()}`);
+                let resp = await response.json();
                 console.error(`Registration failed; AcornGM API responded with ${response.status} - ${response.statusText}: ${resp['error']}`);
                 alert(`Registration failed; AcornGM API responded with ${response.status} - ${response.statusText}: ${resp['error']}`);
                 submitButton.enabled = true;
