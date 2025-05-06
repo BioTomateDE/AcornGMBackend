@@ -37,12 +37,12 @@
 
     // Get Discord User ID and Discord Username from query params
     const discordUserId = getQueryParam("discordUserId");
-    const discordRefreshToken = getQueryParam("discordRefreshToken");
+    const discordAccessToken = getQueryParam("discordAccessToken");
     const discordUsername = getQueryParam("discordUsername");
 
     // Ensure all query params are set
-    if (!discordUserId || !discordRefreshToken || !discordUsername) {
-        alert("Required parameters (discordUserId, discordRefreshToken, discordUsername) are missing from the URL!");
+    if (!discordUserId || !discordAccessToken || !discordUsername) {
+        alert("Required parameters (discordUserId, discordAccessToken, discordUsername) are missing from the URL!");
         throw new Error("Missing query parameters");
     }
 
@@ -139,7 +139,7 @@
             // If form is valid, proceed with the submission (send data)
             const requestData = {
                 discord_user_id: discordUserId,
-                discord_refresh_token: discordRefreshToken,
+                discord_access_token: discordAccessToken,
                 username: usernameValue,
             };
 
