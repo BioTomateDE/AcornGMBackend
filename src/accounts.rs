@@ -26,8 +26,8 @@ pub struct AcornAccount {
 pub struct AcornAccessToken {
     pub token: String,
     pub username: String,
-    pub device_info: DeviceInfo,
     pub created_at: DateTime<Utc>,
+    pub device_info: DeviceInfo,
 }
 
 
@@ -148,13 +148,13 @@ pub async fn insert_access_token(pool: &PgPool, access_token: &AcornAccessToken)
 
     sqlx::query!(
         r#"
-        INSERT INTO access_tokens (token, username, device_info, created_at)
+        INSERT INTO access_tokens (token, username, created_at, device_info)
         VALUES ($1, $2, $3, $4)
         "#,
-        access_token.username,
         access_token.token,
-        device_info_json,
+        access_token.username,
         access_token.created_at,
+        device_info_json,
     )
         .execute(pool)
         .await
