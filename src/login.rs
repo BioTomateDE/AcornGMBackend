@@ -37,25 +37,10 @@ struct TokenResponse {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 struct DiscordUserInfo {
     pub id: String,
     pub username: String,
-    pub avatar: String,
-    pub discriminator: String,
-    pub public_flags: u64,
-    pub flags: u64,
-    pub banner: Option<String>,
-    pub accent_color: u32,
     pub global_name: String,
-    pub avatar_decoration_data: Option<String>,
-    pub collectibles: Option<String>,
-    pub banner_color: String,
-    pub clan: Option<String>,
-    pub primary_guild: Option<String>,
-    pub mfa_enabled: bool,
-    pub locale: String,
-    pub premium_type: u32,
 }
 
 
