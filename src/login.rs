@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Arc, LazyLock};
+use std::sync::LazyLock;
 use base64::Engine;
 use rand::TryRngCore;
 use serde::Deserialize;
@@ -13,7 +13,6 @@ use rocket::State;
 use regex::Regex;
 use rocket::response::content::RawHtml;
 use sqlx::PgPool;
-use tokio::sync::RwLock;
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]

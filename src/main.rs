@@ -3,17 +3,12 @@ mod accounts;
 
 #[macro_use] extern crate rocket;
 
-use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 use log::{info, error};
 use rocket::fs::FileServer;
-use crate::accounts::AcornAccount;
 use crate::login::{api_get_access_token, api_get_discord_auth, api_post_register, api_post_temp_login, redirect_get_goto_discord_auth, AccountHandler};
 use rocket::response::Redirect;
-use sqlx::Pool;
 use sqlx::postgres::PgPoolOptions;
-use tokio::sync::RwLock;
 
 #[get("/")]
 fn html_get_index() -> Redirect {
