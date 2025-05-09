@@ -1,19 +1,18 @@
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::error::DatabaseError;
-use sqlx::PgPool;
+use sqlx::{Pool, Postgres};
 use sqlx::postgres::{PgDatabaseError, PgQueryResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-// #[serde(crate = "rocket::serde")]
+#[serde(crate = "rocket::serde")]
 pub struct DeviceInfo {
     pub distro: String,
     pub platform: String,
     pub desktop_environment: String,
     pub cpu_architecture: String,
 }
-
 
 #[derive(Debug, Clone)]
 pub struct AcornAccount {
@@ -31,7 +30,12 @@ pub struct AcornAccessToken {
 }
 
 
-pub async fn check_if_account_exists(pool: &PgPool, username: &str) -> Result<bool, String> {
+fn pool<'a>() -> &'a Pool<Postgres> {
+    crate::POOL.get().expect("Database pool not initialized")
+}
+
+
+pub async fn check_if_account_exists(username: &str) -> Result<bool, String> {
     let result = sqlx::query_scalar!(
         r#"
         SELECT EXISTS (
@@ -40,14 +44,14 @@ pub async fn check_if_account_exists(pool: &PgPool, username: &str) -> Result<bo
         "#,
         username
     )
-        .fetch_one(pool)
+        .fetch_one(pool())
         .await
         .map_err(|e| format!("Failed to check if account with username {username} exists: {e}"))?;
 
     Ok(result.unwrap_or(false))
 }
 
-pub async fn check_if_account_exists_discord(pool: &PgPool, username: &str, discord_user_id: &str) -> Result<bool, String> {
+pub async fn check_if_account_exists_discord( username: &str, discord_user_id: &str) -> Result<bool, String> {
     let result = sqlx::query_scalar!(
         r#"
         SELECT EXISTS (
@@ -57,14 +61,14 @@ pub async fn check_if_account_exists_discord(pool: &PgPool, username: &str, disc
         username,
         discord_user_id,
     )
-        .fetch_one(pool)
+        .fetch_one(pool())
         .await
         .map_err(|e| format!("Failed to check if account with username {username} exists: {e}"))?;
 
     Ok(result.unwrap_or(false))
 }
 
-pub async fn get_account(pool: &PgPool, username: &str) -> Result<AcornAccount, String> {
+pub async fn get_account(username: &str) -> Result<AcornAccount, String> {
     let account: AcornAccount = sqlx::query_as!(
         AcornAccount,
         r#"
@@ -74,14 +78,14 @@ pub async fn get_account(pool: &PgPool, username: &str) -> Result<AcornAccount, 
         "#,
         username,
     )
-        .fetch_one(pool)
+        .fetch_one(pool())
         .await
         .map_err(|e| format!("Could not fetch account with username {username}: {e}"))?;
     Ok(account)
 }
 
 
-pub async fn get_account_by_discord_id(pool: &PgPool, discord_user_id: &str) -> Result<Option<AcornAccount>, String> {
+pub async fn get_account_by_discord_id(discord_user_id: &str) -> Result<Option<AcornAccount>, String> {
     let account: Option<AcornAccount> = sqlx::query_as!(
         AcornAccount,
         r#"
@@ -91,14 +95,14 @@ pub async fn get_account_by_discord_id(pool: &PgPool, discord_user_id: &str) -> 
         "#,
         discord_user_id,
     )
-        .fetch_optional(pool)
+        .fetch_optional(pool())
         .await
         .map_err(|e| format!("Could not fetch account with discord user id {discord_user_id}: {e}"))?;
     Ok(account)
 }
 
 
-pub async fn get_access_token(pool: &PgPool, username: &str, token: &str) -> Result<AcornAccessToken, String> {
+pub async fn get_access_token(username: &str, token: &str) -> Result<AcornAccessToken, String> {
     let row = sqlx::query!(
         r#"
         SELECT token, username, device_info, created_at
@@ -108,7 +112,7 @@ pub async fn get_access_token(pool: &PgPool, username: &str, token: &str) -> Res
         username,
         token,
     )
-        .fetch_one(pool)
+        .fetch_one(pool())
         .await
         .map_err(|e| format!("Could not fetch access token with username {username}: {e}"))?;
 
@@ -125,7 +129,7 @@ pub async fn get_access_token(pool: &PgPool, username: &str, token: &str) -> Res
 }
 
 
-pub async fn insert_account(pool: &PgPool, account: &AcornAccount) -> Result<(), String> {
+pub async fn insert_account(account: &AcornAccount) -> Result<(), String> {
     sqlx::query!(
         r#"
         INSERT INTO accounts (username, discord_user_id, created_at)
@@ -135,14 +139,14 @@ pub async fn insert_account(pool: &PgPool, account: &AcornAccount) -> Result<(),
         account.discord_user_id,
         account.created_at,
     )
-        .execute(pool)
+        .execute(pool())
         .await
         .map_err(|e| format!("Could not insert account row for account with username {}: {e}", account.username))?;
     Ok(())
 }
 
 
-pub async fn insert_access_token(pool: &PgPool, access_token: &AcornAccessToken) -> Result<(), String> {
+pub async fn insert_access_token(access_token: &AcornAccessToken) -> Result<(), String> {
     let device_info_json = serde_json::to_value(&access_token.device_info)
         .map_err(|e| format!("Could not convert device info to json for access token with username {}: {e}", access_token.username))?;
 
@@ -156,7 +160,7 @@ pub async fn insert_access_token(pool: &PgPool, access_token: &AcornAccessToken)
         access_token.created_at,
         device_info_json,
     )
-        .execute(pool)
+        .execute(pool())
         .await
         .map_err(|e| format!("Could not insert access token row for username {}: {e}", access_token.username))?;
     Ok(())
@@ -164,7 +168,7 @@ pub async fn insert_access_token(pool: &PgPool, access_token: &AcornAccessToken)
 
 
 /// returns whether the temp login token already exists (-> respond 404)
-pub async fn insert_temp_login_token(pool: &PgPool, temp_login_token: &str, username: &str) -> Result<bool, String> {
+pub async fn insert_temp_login_token(temp_login_token: &str, username: &str) -> Result<bool, String> {
     let expires_at: DateTime<Utc> = Utc::now() + Duration::minutes(5);
 
     // Insert the account row
@@ -177,7 +181,7 @@ pub async fn insert_temp_login_token(pool: &PgPool, temp_login_token: &str, user
         username,
         expires_at,
     )
-        .execute(pool)
+        .execute(pool())
         .await;
 
     let result: sqlx::Error = match result {
@@ -199,16 +203,16 @@ pub async fn insert_temp_login_token(pool: &PgPool, temp_login_token: &str, user
 }
 
 
-pub async fn delete_expired_temp_login_tokens(pool: &PgPool) -> Result<(), String> {
+pub async fn delete_expired_temp_login_tokens() -> Result<(), String> {
     sqlx::query!("DELETE FROM temp_login_tokens WHERE expires_at < NOW()")
-        .execute(pool)
+        .execute(pool())
         .await
         .map_err(|e| format!("Could not delete expired temp login tokens: {e}"))?;
     Ok(())
 }
 
 
-pub async fn temp_login_token_get_username(pool: &PgPool, temp_login_token: &str) -> Result<Option<String>, String> {
+pub async fn temp_login_token_get_username(temp_login_token: &str) -> Result<Option<String>, String> {
     let result = sqlx::query!(
         r#"
         SELECT username FROM temp_login_tokens
@@ -216,7 +220,7 @@ pub async fn temp_login_token_get_username(pool: &PgPool, temp_login_token: &str
         "#,
         temp_login_token,
     )
-        .fetch_optional(pool)
+        .fetch_optional(pool())
         .await
         .map_err(|e| format!("Could not get username for temp login token: {e}"))?;
 
@@ -225,12 +229,12 @@ pub async fn temp_login_token_get_username(pool: &PgPool, temp_login_token: &str
         Some(record) => record,
     };
 
-    remove_temp_login_token(pool, temp_login_token).await?;
+    remove_temp_login_token(temp_login_token).await?;
 
     Ok(Some(record.username))
 }
 
-pub async fn remove_temp_login_token(pool: &PgPool, temp_login_token: &str) -> Result<(), String> {
+pub async fn remove_temp_login_token(temp_login_token: &str) -> Result<(), String> {
     sqlx::query!(
         r#"
         DELETE FROM temp_login_tokens
@@ -238,7 +242,7 @@ pub async fn remove_temp_login_token(pool: &PgPool, temp_login_token: &str) -> R
         "#,
         temp_login_token,
     )
-        .execute(pool)
+        .execute(pool())
         .await
         .map_err(|e| format!("Could not remove temp login token: {e}"))?;
 
