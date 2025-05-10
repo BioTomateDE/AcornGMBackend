@@ -20,7 +20,6 @@ use std::sync::{Arc, LazyLock};
 use biologischer_log::CustomLogger;
 use rocket::http::Status;
 use rocket::serde::json::Json;
-use serde::Serialize;
 use serde_json::{json, Value};
 use crate::mods::api_upload_mod_file;
 

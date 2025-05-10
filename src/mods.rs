@@ -1,14 +1,11 @@
 use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use rocket::Data;
-use rocket::data::{ByteUnit, DataStream};
 use rocket::http::{ContentType, Status};
-use rocket::serde::Deserialize;
 use rocket_multipart_form_data::{MultipartFormData, MultipartFormDataField, MultipartFormDataOptions};
-use tokio::io::AsyncReadExt;
-use uuid::{Error, Uuid};
-use crate::{pool, respond_err, respond_ok_empty, respond_ok_value, RespType};
-use crate::accounts::{check_account_auth, AcornAccessToken};
+use uuid::Uuid;
+use crate::{pool, respond_err, respond_ok_empty, RespType};
+use crate::accounts::check_account_auth;
 
 // #[derive(Deserialize)]
 // #[serde(crate = "rocket::serde")]
@@ -171,7 +168,6 @@ async fn insert_mod_variant(mod_id: Uuid, file_data: &Vec<u8>) -> Result<(), Str
     let id: Uuid = Uuid::new_v4();
     let created_at: DateTime<Utc> = Utc::now();
     let last_updated_at: DateTime<Utc> = Utc::now();
-    let file: DateTime<Utc> = Utc::now();
     let version: i32 = 1;
 
     sqlx::query!(
