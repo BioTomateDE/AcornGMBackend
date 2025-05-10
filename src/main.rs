@@ -12,16 +12,41 @@ use crate::login::{
 };
 use log::{error, info};
 use rocket::fs::FileServer;
-use rocket::response::Redirect;
-use sqlx::Postgres;
+use rocket::response::{status, Redirect};
+use sqlx::{Pool, Postgres};
 use sqlx::postgres::PgPoolOptions;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 use biologischer_log::CustomLogger;
+use rocket::http::Status;
+use rocket::serde::json::Json;
+use serde::Serialize;
+use serde_json::{json, Value};
+use crate::mods::api_upload_mod_file;
 
 #[get("/")]
 fn html_get_index() -> Redirect {
     Redirect::to("index.html")
+}
+
+type RespType = Result<Option<Json<Value>>, status::Custom<Json<Value>>>;
+fn respond_err(status: Status, error_message: &str) -> status::Custom<Json<Value>> {
+    status::Custom(
+        status,
+        Json(json!({
+            "error": error_message,
+        }))
+    )
+}
+fn respond_ok_value(json_response: Value) -> RespType {
+    Ok(Some(Json(json!(json_response))))
+}
+fn respond_ok_empty() -> RespType {
+    Ok(None)
+}
+
+fn pool<'a>() -> &'a Pool<Postgres> {
+    POOL.get().expect("Database pool not initialized")
 }
 
 static SERVE_DIR_PATH: LazyLock<PathBuf> = LazyLock::new(|| PathBuf::from("./frontend/"));
@@ -56,7 +81,8 @@ async fn rocket() -> _ {
                 api_get_discord_auth,
                 api_post_register,
                 api_post_temp_login,
-                api_get_access_token
+                api_get_access_token,
+                api_upload_mod_file,
             ],
         )
         .mount("/", FileServer::from(SERVE_DIR_PATH.clone()))

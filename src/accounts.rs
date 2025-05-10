@@ -1,8 +1,8 @@
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::error::DatabaseError;
-use sqlx::{Pool, Postgres};
 use sqlx::postgres::{PgDatabaseError, PgQueryResult};
+use crate::pool;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,16 +30,13 @@ pub struct AcornAccessToken {
 }
 
 
-fn pool<'a>() -> &'a Pool<Postgres> {
-    crate::POOL.get().expect("Database pool not initialized")
-}
-
-
 pub async fn check_if_account_exists(username: &str) -> Result<bool, String> {
-    let result = sqlx::query_scalar!(
+    let result: Option<bool> = sqlx::query_scalar!(
         r#"
         SELECT EXISTS (
-            SELECT 1 FROM accounts WHERE username = $1
+            SELECT 1
+            FROM accounts
+            WHERE username = $1
         )
         "#,
         username
@@ -51,11 +48,13 @@ pub async fn check_if_account_exists(username: &str) -> Result<bool, String> {
     Ok(result.unwrap_or(false))
 }
 
-pub async fn check_if_account_exists_discord( username: &str, discord_user_id: &str) -> Result<bool, String> {
-    let result = sqlx::query_scalar!(
+pub async fn check_if_account_exists_discord(username: &str, discord_user_id: &str) -> Result<bool, String> {
+    let result: Option<bool> = sqlx::query_scalar!(
         r#"
         SELECT EXISTS (
-            SELECT 1 FROM accounts WHERE username = $1 OR discord_user_id = $2
+            SELECT 1
+            FROM accounts
+            WHERE username = $1 OR discord_user_id = $2
         )
         "#,
         username,
@@ -64,6 +63,26 @@ pub async fn check_if_account_exists_discord( username: &str, discord_user_id: &
         .fetch_one(pool())
         .await
         .map_err(|e| format!("Failed to check if account with username {username} exists: {e}"))?;
+
+    Ok(result.unwrap_or(false))
+}
+
+
+pub async fn check_account_auth(username: &str, access_token: &str) -> Result<bool, String> {
+    let result: Option<bool> = sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS (
+            SELECT 1
+            FROM access_tokens
+            WHERE username = $1 AND token = $2
+        )
+        "#,
+        username,
+        access_token,
+    )
+        .fetch_one(pool())
+        .await
+        .map_err(|e| format!("Failed to verify authentication of {username}: {e}"))?;
 
     Ok(result.unwrap_or(false))
 }

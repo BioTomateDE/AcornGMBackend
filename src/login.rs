@@ -18,11 +18,11 @@ use crate::accounts::{
     AcornAccount,
     DeviceInfo,
 };
-use rocket::response::status;
 use rocket::serde::json::Json;
-use serde_json::{json, Value};
+use serde_json::json;
 use regex::Regex;
 use rocket::response::content::RawHtml;
+use crate::{respond_err, respond_ok_empty, respond_ok_value, RespType};
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
@@ -42,28 +42,6 @@ struct DiscordUserInfo {
 }
 
 
-type RespType = status::Custom<Json<Value>>;
-fn respond_err(status: Status, error_message: &str) -> RespType {
-    status::Custom(
-        status,
-        Json(json!({
-            "error": error_message,
-        })),
-    )
-}
-fn respond_ok_value(json_response: Value) -> RespType {
-    status::Custom(
-        Status::Ok,
-        Json(json!(json_response)),
-    )
-}
-fn respond_ok_empty() -> RespType {
-    status::Custom(
-        Status::NoContent,
-        Json(json!({})),
-    )
-}
-
 
 const DISCORD_API_BASE_URL: &'static str = "https://discord.com/api/v10";
 const REDIRECT_URI: &'static str = "https://acorngm.biotomatede.hackclub.app/discord_auth_page.html";
@@ -73,9 +51,13 @@ const DISCORD_CLIENT_SECRET: LazyLock<String> = LazyLock::new(
         .expect("DISCORD_CLIENT_SECRET environment variable not set")
 );
 
-async fn get_access_token(params: HashMap<&str, &str>) -> Result<TokenResponse, (Status, String)> {
-    let client: Client = Client::new();
-    let res = client
+async fn exchange_code(discord_code: &str) -> Result<TokenResponse, (Status, String)> {
+    let mut params = HashMap::new();
+    params.insert("grant_type", "authorization_code");
+    params.insert("code", &discord_code);
+    params.insert("redirect_uri", REDIRECT_URI);
+
+    let res = Client::new()
         .post(format!("{}/oauth2/token", DISCORD_API_BASE_URL))
         .basic_auth(DISCORD_APP_CLIENT_ID, Some(&*DISCORD_CLIENT_SECRET))
         .form(&params)
@@ -108,22 +90,6 @@ async fn get_access_token(params: HashMap<&str, &str>) -> Result<TokenResponse, 
     }))
 }
 
-async fn exchange_code(code: &str) -> Result<TokenResponse, (Status, String)> {
-    let mut params = HashMap::new();
-    params.insert("grant_type", "authorization_code");
-    params.insert("code", &code);
-    params.insert("redirect_uri", REDIRECT_URI);
-    get_access_token(params).await
-}
-
-async fn refresh_token(refresh_token: &str) -> Result<TokenResponse, (Status, String)> {
-    let mut params = HashMap::new();
-    params.insert("grant_type", "refresh_token");
-    params.insert("refresh_token", refresh_token);
-    get_access_token(params).await
-}
-
-
 async fn get_user_info(access_token: &str) -> Result<DiscordUserInfo, String> {
     let client = Client::new();
     let res = client
@@ -132,8 +98,7 @@ async fn get_user_info(access_token: &str) -> Result<DiscordUserInfo, String> {
         .send()
         .await
         .map_err(|e| {
-            error!("Could not request discord user info for discord access \
-            token \"{}...\": {e}", access_token.get(0..6).unwrap_or(access_token));
+            error!("Could not request discord user info for discord access token \"{}...\": {e}", access_token.get(0..6).unwrap_or(access_token));
             format!("Could not request discord user info: {e}")
         })?;
 
@@ -142,7 +107,7 @@ async fn get_user_info(access_token: &str) -> Result<DiscordUserInfo, String> {
     let body: String = res.text().await
         .map_err(|e| {
             error!("Could not get text from response body while getting discord user info \
-            for discord access token \"{}...\": {e}", access_token.get(0..6).unwrap_or(access_token));
+                for discord access token \"{}...\": {e}", access_token.get(0..6).unwrap_or(access_token));
             format!("Could not get text from response body: {e}")
         })?;
 
@@ -166,29 +131,26 @@ pub async fn api_post_register(request_data: Json<RegisterRequest>) -> RespType 
         .expect("Could not load username verification pattern"));
 
     if !USERNAME_REGEX.is_match(&request_data.username) {
-        return respond_err(Status::BadRequest, &("Invalid username! Username must be 3-32 characters long \
-        and contain only latin letters, digits, underscores, and hyphens; without spaces."))
+        return Err(respond_err(Status::BadRequest, &("Invalid username! Username must be 3-32 characters long \
+        and contain only latin letters, digits, underscores, and hyphens; without spaces.")))
     }
 
     // validate access token and discord user id
     info!("Getting discord user info for discord user id {}", request_data.discord_user_id);
-    let user_info: DiscordUserInfo = match get_user_info(&request_data.discord_access_token).await {
-        Ok(info) => info,
-        Err(e) => return respond_err(Status::Unauthorized, &e),
-    };
+    let user_info: DiscordUserInfo = get_user_info(&request_data.discord_access_token).await
+        .map_err(|e| respond_err(Status::Unauthorized, &e))?;
 
     if user_info.id != request_data.discord_user_id {
-        return respond_err(Status::Unauthorized, "The provided discord user ID does not belong to the provided discord access token!");
+        return Err(respond_err(Status::Unauthorized, "The provided discord user ID does not belong to the provided discord access token!"));
     }
 
     // check if there is already an AcornGM account connected to this discord user or with this username
     info!("Got discord user info for discord user id {}: username: \"{}\", displayname: \"{}\"", request_data.discord_user_id, user_info.username, user_info.global_name);
-    let result: Result<bool, String> = check_if_account_exists_discord(&request_data.username, &request_data.discord_user_id).await;
-    match result {
-        Err(e) => return respond_err(Status::InternalServerError, &e),
-        Ok(account_exists) => if account_exists {
-            return respond_err(Status::Conflict, "Account with this username or discord user id already exists!")
-        }
+    let account_exists: bool = check_if_account_exists_discord(&request_data.username, &request_data.discord_user_id).await
+        .map_err(|e| respond_err(Status::InternalServerError, &e))?;
+
+    if account_exists {
+        return Err(respond_err(Status::Conflict, "Account with this username or discord user id already exists!"))
     }
 
     // add to account list
@@ -201,7 +163,7 @@ pub async fn api_post_register(request_data: Json<RegisterRequest>) -> RespType 
 
     info!("Adding account: {account:?}");
     if let Err(e) = insert_account(&account).await {
-        return respond_err(Status::InternalServerError, &e)
+        return Err(respond_err(Status::InternalServerError, &e))
     }
 
     info!("User {} with Discord ID {} registered successfully.", request_data.username, request_data.discord_user_id);
@@ -213,38 +175,29 @@ pub async fn api_post_register(request_data: Json<RegisterRequest>) -> RespType 
 pub async fn api_get_discord_auth(discord_code: &str) -> RespType {
     // Get access/refresh tokens from OAuth2 code
     info!("Handling `GET discord_auth` with code \"{discord_code}\"");
-    let token_response: TokenResponse = match exchange_code(discord_code).await {
-        Ok(token_response) => token_response,
-        Err((status, error)) => return status::Custom(status, Json(json!({
-                "error": format!("Error while getting discord access token: {error}"),
-            })))
-    };
+    let token_response: TokenResponse = exchange_code(discord_code).await
+        .map_err(|(status, e)| respond_err(status, &format!("Error while getting discord access token: {e}")))?;
     info!("Exchanged code with discord for code \"{discord_code}\"; getting discord user info");
 
     // Get Discord User ID
-    let user_info: DiscordUserInfo = match get_user_info(&token_response.access_token).await {
-        Ok(user_info) => user_info,
-        Err(error) => return respond_err(Status::InternalServerError, &format!("Error while getting discord user info: {error}")),
-    };
+    let user_info: DiscordUserInfo = get_user_info(&token_response.access_token).await
+        .map_err(|e| respond_err(Status::InternalServerError, &format!("Error while getting discord user info: {e}")))?;
 
     info!("Got user info for code \"{discord_code}\"; username: \"{}\", displayname: \"{}\"", user_info.username, user_info.global_name);
 
     // check if account already exists
-    let result: Result<Option<AcornAccount>, String> = get_account_by_discord_id(&user_info.id).await;
-    let account_maybe: Option<AcornAccount> = match result {
-        Err(e) => return respond_err(Status::InternalServerError, &e),
-        Ok(account) => account
-    };
+    let account_maybe: Option<AcornAccount> = get_account_by_discord_id(&user_info.id).await
+        .map_err(|e| respond_err(Status::InternalServerError, &e))?;
 
     if let Some(account) = account_maybe {
         info!("Got discord auth for existing user {} with code \"{}\": \
             Discord ID: {}; Discord Username: {}", account.username, discord_code, user_info.id, user_info.username);
 
         return respond_ok_value(json!({
-                "register": false,
-                "discordUserId": user_info.id,
-                "username": account.username,
-            }))
+            "register": false,
+            "discordUserId": user_info.id,
+            "username": account.username,
+        }))
     }
 
     // account does not exist; let client register
@@ -252,11 +205,11 @@ pub async fn api_get_discord_auth(discord_code: &str) -> RespType {
         Discord ID: {}; Discord Username: {}", discord_code, user_info.id, user_info.username);
 
     respond_ok_value(json!({
-            "register": true,
-            "discordAccessToken": token_response.access_token,
-            "discordUserId": user_info.id,
-            "discordUsername": user_info.username,
-        }))
+        "register": true,
+        "discordAccessToken": token_response.access_token,
+        "discordUserId": user_info.id,
+        "discordUsername": user_info.username,
+    }))
 }
 
 
@@ -264,16 +217,16 @@ pub async fn api_get_discord_auth(discord_code: &str) -> RespType {
 #[post("/temp_login", data="<request_data>")]
 pub async fn api_post_temp_login(request_data: Json<TempLoginRequest>) -> RespType {
     info!("Handling `POST temp_login` with username {} and temp login token \"{}\"", request_data.username, request_data.temp_login_token);
-    let result: Result<bool, String> = insert_temp_login_token(&request_data.temp_login_token, &request_data.username).await;
-    match result {
-        Err(e) => respond_err(Status::InternalServerError, &e),
-        Ok(already_exists) => if already_exists {
-            respond_err(Status::Conflict, "Temp login token already exists")
-        } else {
-            info!("Inserted temp login token into database for username {}.", request_data.username);
-            respond_ok_empty()
-        }
+
+    let already_exists: bool = insert_temp_login_token(&request_data.temp_login_token, &request_data.username).await
+        .map_err(|e| respond_err(Status::InternalServerError, &e))?;
+
+    if already_exists {
+        return Err(respond_err(Status::Conflict, "Temp login token already exists"))
     }
+
+    info!("Inserted temp login token into database for username {}.", request_data.username);
+    respond_ok_empty()
 }
 
 
@@ -283,31 +236,25 @@ pub async fn api_post_temp_login(request_data: Json<TempLoginRequest>) -> RespTy
 #[post("/access_token", format="json", data="<request_data>")]
 pub async fn api_get_access_token(request_data: Json<GetAccessTokenRequest>) -> RespType {
     info!("Handling `GET access_token` with temp login token \"{}\"", request_data.temp_login_token);
-    let result: Result<Option<String>, String> = temp_login_token_get_username(&request_data.temp_login_token).await;
-    let username: String = match result {
-        Err(e) => return respond_err(Status::InternalServerError, &e),
-        Ok(username) => match username {
-            None => return respond_err(Status::NotFound, "Could not find username for temp login token. \
-                It may have expired or the user has not finished logging in yet."),
-            Some(username) => username,
-        }
-    };
+
+    let username: String = temp_login_token_get_username(&request_data.temp_login_token).await
+        .map_err(|e| respond_err(Status::InternalServerError, &e))?
+        .ok_or_else(|| respond_err(Status::NotFound, "Could not find username for temp login token. \
+            It may have expired or the user has not finished logging in yet."))?;
 
     info!("Found username {} for temp login token \"{}\"", username, request_data.temp_login_token);
-    let result: Result<bool, String> = check_if_account_exists(&username).await;
-    match result {
-        Err(e) => return respond_err(Status::InternalServerError, &e),
-        Ok(account_exists) => if !account_exists {
-            return respond_err(Status::NotFound, &format!("Account with username \"{username}\" does not exist!"))
-        }
+    let account_exists: bool = check_if_account_exists(&username).await
+        .map_err(|e| respond_err(Status::InternalServerError, &e))?;
+    if !account_exists {
+        return Err(respond_err(Status::NotFound, &format!("Account with username \"{username}\" does not exist!")))
     }
 
     // generate access token
     let mut buf = [0u8; 187];
-    if let Err(e) = rand::rngs::OsRng.try_fill_bytes(&mut buf) {
+    rand::rngs::OsRng.try_fill_bytes(&mut buf).map_err(|e| {
         error!("Could not generate cryptographically secure random bytes for token: {e}");
-        return respond_err(Status::InternalServerError, "Could not generate access token!")
-    };
+        respond_err(Status::InternalServerError, "Could not generate access token!")
+    })?;
     let generated_token: String = base64::prelude::BASE64_URL_SAFE.encode(buf);
 
     let acorn_token = AcornAccessToken {
@@ -317,9 +264,8 @@ pub async fn api_get_access_token(request_data: Json<GetAccessTokenRequest>) -> 
         created_at: Utc::now(),
     };
 
-    if let Err(e) = insert_access_token(&acorn_token).await {
-        return respond_err(Status::InternalServerError, &e)
-    }
+   insert_access_token(&acorn_token).await
+       .map_err(|e| respond_err(Status::InternalServerError, &e))?;
 
     // Success
     info!("User {} signed in on {}", username, request_data.device_info.distro);
