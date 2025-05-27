@@ -1,3 +1,9 @@
+html {
+    margin: 0 auto;
+    max-width: 900px;
+}
+
+
 body {
     font-family: Arial, sans-serif;
     margin: 0;
@@ -12,7 +18,7 @@ h1 {
 }
 
 h2 {
-    color: #b1b0a6;
+    color: #b9b7b5;
 }
 
 p {
@@ -29,6 +35,17 @@ a {
 a:hover {
     text-decoration: underline;
 }
+
+li {
+    font-size: 1.2em;
+    margin: 10px 0;
+}
+
+li li {
+    font-size: 1em;
+    margin: 3px 0;
+}
+
 
 form {
     background-color: #2a2b2d;
@@ -102,6 +119,7 @@ input[type="submit"]:hover {
     border-radius: 4px;
     transition: background-color 0.3s ease;
 }
+
 #register-button:hover {
     background-color: #45a049;
 }

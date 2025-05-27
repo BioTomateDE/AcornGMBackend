@@ -27,6 +27,10 @@ use crate::mods::api_upload_mod_file;
 fn html_get_index() -> Redirect {
     Redirect::to("index.html")
 }
+#[get("/eula")]
+fn html_get_eula() -> Redirect {
+    Redirect::to("eula.html")
+}
 
 type RespType = Result<Option<Json<Value>>, status::Custom<Json<Value>>>;
 fn respond_err(status: Status, error_message: &str) -> status::Custom<Json<Value>> {
@@ -73,7 +77,7 @@ async fn rocket() -> _ {
     info!("Starting rocket");
     rocket::build()
         .configure(rocket::Config::figment().merge(("port", 24187)))
-        .mount("/", routes![html_get_index, redirect_get_goto_discord_auth])
+        .mount("/", routes![html_get_index, html_get_eula, redirect_get_goto_discord_auth])
         .mount(
             "/api",
             routes![
