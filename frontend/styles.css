@@ -47,6 +47,20 @@ li li {
 }
 
 
+footer {
+    background-color: #1e1f20;
+    border-top: 2px solid #2a2b2c;
+    padding: 1em 2em;
+    margin-top: 3em;
+    text-align: center;
+    color: #aaa;
+}
+
+footer p {
+    font-size: 0.9em;
+}
+
+
 form {
     background-color: #2a2b2d;
     padding: 1em;
