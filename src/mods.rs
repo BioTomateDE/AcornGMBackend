@@ -1,25 +1,22 @@
 use std::str::FromStr;
-use chrono::{DateTime, Utc};
 use rocket::Data;
+use rocket::form::validate::Contains;
 use rocket::http::{ContentType, Status};
 use rocket_multipart_form_data::{MultipartFormData, MultipartFormDataField, MultipartFormDataOptions};
+use sqlx::QueryBuilder;
 use uuid::Uuid;
 use crate::{pool, respond_err, respond_ok_empty, RespType};
-use crate::accounts::check_account_auth;
+use crate::accounts::ensure_account_authentication;
+use crate::sanitize::sanitize_string;
 
-// #[derive(Deserialize)]
-// #[serde(crate = "rocket::serde")]
-// struct UploadModRequest<'a> {
-//     username: String,
-//     acorn_access_token: String,
-//     mod_variant_id: Option<String>,
-//     file_data: Data<'a>,
-// }
 
-#[post("/upload_mod", data = "<data>")]
-pub async fn api_upload_mod_file(content_type: &ContentType, data: Data<'_>) -> RespType {
-    const MAX_SIZE: u64 = 16 * 1024 * 1024;   // 16 MB
-    info!("Handling `POST upload_mod`");
+const MAX_FILE_SIZE: u64 = 16 * 1024 * 1024;   // 16 MB
+
+
+#[put("/mod", data = "<data>")]
+pub async fn api_upload_mod(content_type: &ContentType, data: Data<'_>) -> RespType {
+    let err_400 = |e: String| respond_err(Status::BadRequest, &e);
+    info!("Handling `PUT` mod");
 
     // Check MIME type
     if !content_type.is_binary() {
@@ -28,57 +25,167 @@ pub async fn api_upload_mod_file(content_type: &ContentType, data: Data<'_>) -> 
     }
 
     let form_options = MultipartFormDataOptions::with_multipart_form_data_fields(vec![
-        MultipartFormDataField::raw("file_data").size_limit(MAX_SIZE),
         MultipartFormDataField::text("username"),
         MultipartFormDataField::text("access_token"),
-        MultipartFormDataField::text("mod_variant_id"),
-        MultipartFormDataField::text("mod_id"),
+        MultipartFormDataField::raw("file_data").size_limit(MAX_FILE_SIZE),
+        MultipartFormDataField::text("title"),
+        MultipartFormDataField::text("description"),
+        MultipartFormDataField::text("game_name"),
+        MultipartFormDataField::text("game_version"),
     ]);
     let form_data: MultipartFormData = MultipartFormData::parse(content_type, data, form_options).await
-        .map_err(|e| respond_err(Status::BadRequest, &format!("Could not parse form data: {e}")))?;
+        .map_err(|e| format!("Could not parse form data: {e}")).map_err(err_400)?;
+    
+    let username: &String = get_text_form_field(&form_data, "username").map_err(err_400)?;
+    let access_token: &String = get_text_form_field(&form_data, "access_token").map_err(err_400)?;
+    let file_data: &Vec<u8> = get_bytes_form_field(&form_data, "file_data").map_err(err_400)?;
+    let title: &String = get_text_form_field(&form_data, "title").map_err(err_400)?;
+    let description: &String = get_text_form_field(&form_data, "description").map_err(err_400)?;
+    let game_name: &String = get_text_form_field(&form_data, "game_name").map_err(err_400)?;
+    let game_version: &String = get_text_form_field(&form_data, "game_version").map_err(err_400)?;
 
-    let file_data: &Vec<u8> = get_bytes_form_field(&form_data, "file_data")
-        .map_err(|e| respond_err(Status::BadRequest, &e))?;
-    let username: &String = get_text_form_field(&form_data, "username")
-        .map_err(|e| respond_err(Status::BadRequest, &e))?;
-    let access_token: &String = get_text_form_field(&form_data, "access_token")
-        .map_err(|e| respond_err(Status::BadRequest, &e))?;
-    let mod_variant_id: Option<&String> = get_text_form_field_optional(&form_data, "mod_variant_id");
-    let mod_id: Option<&String> = get_text_form_field_optional(&form_data, "mod_id");   // only needs to be set if mod_variant_id ISN'T set
+    ensure_account_authentication(&username, &access_token).await?;
 
-    let authorized: bool =  check_account_auth(&username, &access_token).await
-        .map_err(|e| respond_err(Status::InternalServerError, &e))?;
-    if !authorized {
-        return Err(respond_err(Status::Unauthorized, "Not authorized; invalid username or access token."))
+    let title: String = sanitize_string(title).ok_or_else(|| respond_err(Status::BadRequest, "Invalid title"))?;
+    if title.len() > 256 || title.len() < 8 {
+        return Err(respond_err(Status::BadRequest, "Title should be 8-256 chars long"))
+    }
+    if title.contains("\n") || title.contains("\r") {
+        return Err(respond_err(Status::BadRequest, "Title must not contain newlines"))
     }
 
-    if let Some(mod_variant_id) = mod_variant_id {
-        // update existing mod variant
-        let mod_variant_id: Uuid = Uuid::from_str(&mod_variant_id)
-            .map_err(|e| respond_err(Status::BadRequest, &format!("Could not parse mod uuid \"{}\": {e}", mod_variant_id)))?;
+    let description: String = sanitize_string(description).ok_or_else(|| respond_err(Status::BadRequest, "Invalid description"))?;
+    
+    if !matches!(game_name.as_str(), "Undertale" | "Deltarune") {
+        return Err(respond_err(Status::BadRequest, "Invalid or unknown game name"))
+    }
+    
+    let err_game_ver = || respond_err(Status::BadRequest, "Invalid game version");
+    let mut game_version_parts = game_version.split('.');
+    let game_version_minor: i32 = game_version_parts.next().ok_or_else(err_game_ver)?.parse::<u32>().map_err(|_| err_game_ver())? as i32;
+    let game_version_major: i32 = game_version_parts.next().ok_or_else(err_game_ver)?.parse::<u32>().map_err(|_| err_game_ver())? as i32;
+    if game_version_parts.next().is_some() {
+        return Err(err_game_ver())
+    }
+    
+    sqlx::query!(
+        r#"
+        INSERT INTO mods (author, file_data, title, description, game_name, game_version_major, game_version_minor)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        "#,
+        username,
+        file_data,
+        title,
+        description,
+        game_name,
+        game_version_major,
+        game_version_minor,
+    )
+        .execute(pool())
+        .await
+        .map_err(|e| respond_err(
+            Status::InternalServerError,
+            &format!("Could not create mod for mod with title \"{title}\": {e}"))
+        )?;
+    
+    respond_ok_empty()
+}
 
-        let authenticated = check_mod_variant_ownership(mod_variant_id, &username).await
-            .map_err(|e| respond_err(Status::InternalServerError, &e))?;
-        if !authenticated {
-            return Err(respond_err(Status::Forbidden, "Not authenticated; you do not have permission to edit this mod."))
-        }
 
-        update_mod_variant(mod_variant_id, file_data).await
-            .map_err(|e| respond_err(Status::InternalServerError, &format!("Could not update mod variant: {e}")))?;
+#[patch("/mod", data = "<data>")]
+pub async fn api_update_mod(content_type: &ContentType, data: Data<'_>) -> RespType {
+    let err_400 = |e: String| respond_err(Status::BadRequest, &e);
+    info!("Handling `PATCH` mod");
 
-    } else {
-        // create new mod variant
-        let mod_id: Uuid = Uuid::from_str(mod_id
-            .ok_or_else(|| respond_err(Status::BadRequest, "Mod ID needs to be set if Mod Variant ID isn't set."))?
-        ).map_err(|e| respond_err(Status::BadRequest, &format!("Mod ID needs to be a valid UUID: {e}")))?;
-        insert_mod_variant(mod_id, file_data).await
-            .map_err(|e| respond_err(Status::InternalServerError, &e))?;
+    // Check MIME type
+    if !content_type.is_binary() {
+        warn!("Unsupported content type: {content_type}");
+        return Err(respond_err(Status::BadRequest, &format!("Unsupported content type {}", content_type)));
     }
 
+    let form_options = MultipartFormDataOptions::with_multipart_form_data_fields(vec![
+        MultipartFormDataField::text("username"),
+        MultipartFormDataField::text("access_token"),
+        MultipartFormDataField::text("mod_id"),
+        MultipartFormDataField::raw("file_data").size_limit(MAX_FILE_SIZE),
+        MultipartFormDataField::text("description"),
+    ]);
+    let form_data: MultipartFormData = MultipartFormData::parse(content_type, data, form_options).await
+        .map_err(|e| format!("Could not parse form data: {e}")).map_err(err_400)?;
+
+    let username: &String = get_text_form_field(&form_data, "username").map_err(err_400)?;
+    let access_token: &String = get_text_form_field(&form_data, "access_token").map_err(err_400)?;
+    ensure_account_authentication(username, access_token).await?;
+    
+    let mod_id: &String = get_text_form_field(&form_data, "mod_id").map_err(err_400)?;
+    let mod_id: Uuid = Uuid::from_str(mod_id).map_err(|e| format!("Invalid Mod UUID: {e}")).map_err(err_400)?;
+    ensure_mod_authorization(mod_id, username).await?;
+    
+    let file_data: Option<&Vec<u8>> = get_bytes_form_field_opt(&form_data, "file_data");
+    let description: Option<&String> = get_text_form_field_opt(&form_data, "description");
+    
+    if file_data.is_none() && description.is_none() {
+        return Err(respond_err(Status::BadRequest, "Nothing to update"))
+    }
+    
+    let description: Option<String> = if let Some(desc) = description {
+        Some(sanitize_string(desc).ok_or_else(|| respond_err(Status::BadRequest, "Invalid description"))?)
+    } else { None };
+
+    let mut query = QueryBuilder::new("UPDATE mods SET ");
+    let mut separated = query.separated(", ");
+    if let Some(file_data) = file_data {
+        separated.push("file_data=").push_bind(file_data);
+    }
+    if let Some(desc) = description {
+        separated.push("description=").push_bind(desc);
+    }
+    separated.push("mod_version = mod_version + 1");
+    
+    query.push(" WHERE id=").push_bind(mod_id);
+    query.build().execute(pool()).await.map_err(|e| respond_err(
+        Status::InternalServerError,
+        &format!("Could not update mod: {e}"))
+    )?;
 
     respond_ok_empty()
 }
 
+
+#[delete("/mod", data = "<data>")]
+pub async fn api_delete_mod(content_type: &ContentType, data: Data<'_>) -> RespType {
+    let err_400 = |e: String| respond_err(Status::BadRequest, &e);
+    info!("Handling `DELETE` mod");
+    
+    let form_options = MultipartFormDataOptions::with_multipart_form_data_fields(vec![
+        MultipartFormDataField::text("username"),
+        MultipartFormDataField::text("access_token"),
+        MultipartFormDataField::text("mod_id"),
+    ]);
+    let form_data: MultipartFormData = MultipartFormData::parse(content_type, data, form_options).await
+        .map_err(|e| format!("Could not parse form data: {e}")).map_err(err_400)?;
+
+    let username: &String = get_text_form_field(&form_data, "username").map_err(err_400)?;
+    let access_token: &String = get_text_form_field(&form_data, "access_token").map_err(err_400)?;
+    ensure_account_authentication(username, access_token).await?;
+
+    let mod_id: &String = get_text_form_field(&form_data, "mod_id").map_err(err_400)?;
+    let mod_id: Uuid = Uuid::from_str(mod_id).map_err(|e| format!("Invalid Mod UUID: {e}")).map_err(err_400)?;
+    ensure_mod_authorization(mod_id, username).await?;
+
+    sqlx::query!(
+        r#"
+        DELETE FROM mods
+        WHERE id = $1
+        "#,
+        mod_id,
+    )
+        .execute(pool())
+        .await
+        .map_err(|e| respond_err(Status::InternalServerError, &format!("Could not delete mod: {e}")))?;
+
+    respond_ok_empty()
+}
 
 pub fn get_text_form_field<'a>(form_data: &'a MultipartFormData, field_name: &str) -> Result<&'a String, String> {
     form_data.texts.get(field_name)
@@ -87,7 +194,7 @@ pub fn get_text_form_field<'a>(form_data: &'a MultipartFormData, field_name: &st
         .ok_or_else(|| format!("Text field `{field_name}` missing from request form!"))
 }
 
-pub fn get_text_form_field_optional<'a>(form_data: &'a MultipartFormData, field_name: &str) -> Option<&'a String> {
+pub fn get_text_form_field_opt<'a>(form_data: &'a MultipartFormData, field_name: &str) -> Option<&'a String> {
     form_data.texts.get(field_name)
         .and_then(|i| i.get(0))
         .map(|field| &field.text)
@@ -100,10 +207,14 @@ pub fn get_bytes_form_field<'a>(form_data: &'a MultipartFormData, field_name: &s
         .ok_or_else(|| format!("Raw field `{field_name}` missing from request form!"))
 }
 
+pub fn get_bytes_form_field_opt<'a>(form_data: &'a MultipartFormData, field_name: &str) -> Option<&'a Vec<u8>> {
+    form_data.raw.get(field_name)
+        .and_then(|i| i.get(0))
+        .map(|field| &field.raw)
+}
 
-async fn check_mod_variant_ownership(mod_variant_id: Uuid, username: &str) -> Result<bool, String> {
-    let mod_id: Uuid = get_mod_id_of_variant(mod_variant_id).await?;
 
+async fn ensure_mod_authorization(mod_id: Uuid, username: &str) -> RespType {
     let exists: bool = sqlx::query_scalar!(
         r#"
         SELECT EXISTS(
@@ -117,95 +228,12 @@ async fn check_mod_variant_ownership(mod_variant_id: Uuid, username: &str) -> Re
     )
         .fetch_one(pool())
         .await
-        .map_err(|e| format!("Could not insert mod file: {e}"))?
-        .ok_or_else(|| "The specified mod or user does not exist.")?;
+        .map_err(|e| respond_err(Status::InternalServerError, &format!("Could not verify mod ownership: {e}")))?
+        .ok_or_else(|| respond_err(Status::InternalServerError, "The specified mod or user does not exist."))?;
 
-    Ok(exists)
-}
-
-
-async fn get_mod_id_of_variant(mod_variant_id: Uuid) -> Result<Uuid, String> {
-    let record = sqlx::query!(
-        r#"
-        SELECT mod_id
-        FROM mod_variants
-        WHERE id = $1
-        "#,
-        mod_variant_id,
-    )
-        .fetch_one(pool())
-        .await
-        .map_err(|e|format!("Could not fetch mod id for mod variant id: {e}"))?;
-
-    Ok(record.mod_id)
-}
-
-
-async fn update_mod_variant(mod_variant_id: Uuid, file_data: &Vec<u8>) -> Result<(), String> {
-    let mod_version: i32 = mod_file_get_current_version(mod_variant_id).await?;
-
-    sqlx::query!(
-        r#"
-        UPDATE mod_variants
-        SET version = $1,
-            file_data = $2
-        "#,
-        mod_version + 1,
-        file_data,
-    )
-        .execute(pool())
-        .await
-        .map_err(|e| {
-            error!("Could not fetch mod id for mod variant id: {e}");
-            format!("Could not fetch mod id for mod variant id: {e}")
-        })?;
-
-    Ok(())
-}
-
-
-async fn insert_mod_variant(mod_id: Uuid, file_data: &Vec<u8>) -> Result<(), String> {
-    let id: Uuid = Uuid::new_v4();
-    let created_at: DateTime<Utc> = Utc::now();
-    let last_updated_at: DateTime<Utc> = Utc::now();
-    let version: i32 = 1;
-
-    sqlx::query!(
-        r#"
-        INSERT INTO mod_variants (id, created_at, last_updated_at, mod_id, file_data, version)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        "#,
-        id,
-        created_at,
-        last_updated_at,
-        mod_id,
-        file_data,
-        version,
-    )
-        .execute(pool())
-        .await
-        .map_err(|e| {
-            error!("Could not insert mod variant for mod uuid {mod_id}: {e}");
-            format!("Could not insert mod variant for mod uuid {mod_id}: {e}")
-        })?;
-
-    Ok(())
-}
-
-
-async fn mod_file_get_current_version(mod_variant_id: Uuid) -> Result<i32, String> {
-    let record = sqlx::query!(
-        r#"
-        SELECT version
-        FROM mod_variants
-        WHERE id = $1
-        "#,
-        mod_variant_id,
-    )
-        .fetch_one(pool())
-        .await
-        .map_err(|e| format!("Could not fetch mod id for mod variant id: {e}"))?;
-
-    Ok(record.version)
+    if !exists {
+        return Err(respond_err(Status::Forbidden, "Unauthorized; you do not have permission to modify this mod"))
+    }
+    respond_ok_empty()
 }
 

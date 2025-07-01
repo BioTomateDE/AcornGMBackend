@@ -1,27 +1,29 @@
 mod accounts;
 mod login;
 mod mods;
+mod search_mods;
+mod sanitize;
 
 #[macro_use]
 extern crate rocket;
 
 use once_cell::sync::OnceCell;
-use crate::login::{
-    api_get_access_token, api_get_discord_auth, api_post_register,
-    api_post_temp_login, redirect_get_goto_discord_auth,
-};
+use crate::login::api_get_access_token;
+use crate::login::api_get_discord_auth;
+use crate::login::api_post_register;
+use crate::login::api_post_temp_login;
+use crate::login::redirect_get_goto_discord_auth;
 use log::{error, info};
 use rocket::fs::FileServer;
 use rocket::response::{status, Redirect};
 use sqlx::{Pool, Postgres};
 use sqlx::postgres::PgPoolOptions;
 use std::path::PathBuf;
-use std::sync::{Arc, LazyLock};
-use biologischer_log::CustomLogger;
+use std::sync::LazyLock;
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use serde_json::{json, Value};
-use crate::mods::api_upload_mod_file;
+use crate::mods::{api_delete_mod, api_update_mod, api_upload_mod};
 
 #[get("/")]
 fn html_get_index() -> Redirect {
@@ -53,14 +55,13 @@ fn pool<'a>() -> &'a Pool<Postgres> {
 }
 
 static SERVE_DIR_PATH: LazyLock<PathBuf> = LazyLock::new(|| PathBuf::from("./frontend/"));
-static LOGGER: LazyLock<Arc<CustomLogger>> = LazyLock::new(|| biologischer_log::init_logger(env!("CARGO_CRATE_NAME")));
-static POOL: OnceCell<sqlx::Pool<Postgres>> = OnceCell::new();
+static POOL: OnceCell<Pool<Postgres>> = OnceCell::new();
 
 #[launch]
 async fn rocket() -> _ {
     println!("Main function started");
-    dotenv::dotenv().ok();
-    let _ = *LOGGER;
+    dotenvy::dotenv().ok();
+    biologischer_log::init(env!("CARGO_CRATE_NAME"));
     info!("Logger initialized");
 
     let pool = PgPoolOptions::new()
@@ -69,7 +70,6 @@ async fn rocket() -> _ {
         .await
         .unwrap_or_else(|e| {
             error!("Could not initialize database: {e}");
-            LOGGER.shutdown();
             std::process::exit(1);
         });
     POOL.set(pool).expect("Could not set database pool OnceCell");
@@ -85,7 +85,9 @@ async fn rocket() -> _ {
                 api_post_register,
                 api_post_temp_login,
                 api_get_access_token,
-                api_upload_mod_file,
+                api_upload_mod,
+                api_update_mod,
+                api_delete_mod,
             ],
         )
         .mount("/", FileServer::from(SERVE_DIR_PATH.clone()))

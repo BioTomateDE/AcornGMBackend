@@ -1,18 +1,9 @@
 use chrono::{DateTime, Duration, Utc};
-use serde::{Deserialize, Serialize};
+use rocket::http::Status;
 use sqlx::error::DatabaseError;
 use sqlx::postgres::{PgDatabaseError, PgQueryResult};
-use crate::pool;
+use crate::{pool, respond_err, respond_ok_empty, RespType};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(crate = "rocket::serde")]
-pub struct DeviceInfo {
-    pub distro: String,
-    pub platform: String,
-    pub desktop_environment: String,
-    pub cpu_architecture: String,
-}
 
 #[derive(Debug, Clone)]
 pub struct AcornAccount {
@@ -26,7 +17,6 @@ pub struct AcornAccessToken {
     pub token: String,
     pub username: String,
     pub created_at: DateTime<Utc>,
-    pub device_info: DeviceInfo,
 }
 
 
@@ -68,7 +58,7 @@ pub async fn check_if_account_exists_discord(username: &str, discord_user_id: &s
 }
 
 
-pub async fn check_account_auth(username: &str, access_token: &str) -> Result<bool, String> {
+pub async fn ensure_account_authentication(username: &str, access_token: &str) -> RespType {
     let result: Option<bool> = sqlx::query_scalar!(
         r#"
         SELECT EXISTS (
@@ -82,9 +72,14 @@ pub async fn check_account_auth(username: &str, access_token: &str) -> Result<bo
     )
         .fetch_one(pool())
         .await
-        .map_err(|e| format!("Failed to verify authentication of {username}: {e}"))?;
+        .map_err(|e| respond_err(Status::InternalServerError, &format!("Failed to verify authentication of {username}: {e}")))?;
 
-    Ok(result.unwrap_or(false))
+    let authenticated: bool = result.unwrap_or(false);  // if account doesn't exist; authentication failed
+    if !authenticated {
+        return Err(respond_err(Status::Unauthorized, "Not authenticated; invalid username or access token"))
+    }
+    
+    respond_ok_empty()   // will NOT actually be used as a response to the http request
 }
 
 pub async fn get_account(username: &str) -> Result<AcornAccount, String> {
@@ -124,7 +119,7 @@ pub async fn get_account_by_discord_id(discord_user_id: &str) -> Result<Option<A
 pub async fn get_access_token(username: &str, token: &str) -> Result<AcornAccessToken, String> {
     let row = sqlx::query!(
         r#"
-        SELECT token, username, device_info, created_at
+        SELECT token, username, created_at
         FROM access_tokens
         WHERE username = $1 AND token = $2
         "#,
@@ -134,14 +129,10 @@ pub async fn get_access_token(username: &str, token: &str) -> Result<AcornAccess
         .fetch_one(pool())
         .await
         .map_err(|e| format!("Could not fetch access token with username {username}: {e}"))?;
-
-    let device_info: DeviceInfo = serde_json::from_value(row.device_info)
-        .map_err(|e| format!("Could not deserialize device info json: {e}"))?;
-
+    
     let access_token = AcornAccessToken {
         token: row.token,
         username: row.username,
-        device_info,
         created_at: row.created_at,
     };
     Ok(access_token)
@@ -166,18 +157,14 @@ pub async fn insert_account(account: &AcornAccount) -> Result<(), String> {
 
 
 pub async fn insert_access_token(access_token: &AcornAccessToken) -> Result<(), String> {
-    let device_info_json = serde_json::to_value(&access_token.device_info)
-        .map_err(|e| format!("Could not convert device info to json for access token with username {}: {e}", access_token.username))?;
-
     sqlx::query!(
         r#"
-        INSERT INTO access_tokens (token, username, created_at, device_info)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO access_tokens (token, username, created_at)
+        VALUES ($1, $2, $3)
         "#,
         access_token.token,
         access_token.username,
         access_token.created_at,
-        device_info_json,
     )
         .execute(pool())
         .await

@@ -16,7 +16,6 @@ use crate::accounts::{
     temp_login_token_get_username,
     AcornAccessToken,
     AcornAccount,
-    DeviceInfo,
 };
 use rocket::serde::json::Json;
 use serde_json::json;
@@ -233,16 +232,16 @@ pub async fn api_post_temp_login(request_data: Json<TempLoginRequest>) -> RespTy
 
 /// post request because json in body is easier to deal with than in params
 #[allow(private_interfaces)]
-#[post("/access_token", format="json", data="<request_data>")]
-pub async fn api_get_access_token(request_data: Json<GetAccessTokenRequest>) -> RespType {
-    info!("Handling `GET access_token` with temp login token \"{}\"", request_data.temp_login_token);
-
-    let username: String = temp_login_token_get_username(&request_data.temp_login_token).await
+#[post("/access_token", data="<temp_login_token>")]
+pub async fn api_get_access_token(temp_login_token: &str) -> RespType {
+    info!("Handling `GET access_token` with temp login token \"{}\"", temp_login_token);
+    
+    let username: String = temp_login_token_get_username(&temp_login_token).await
         .map_err(|e| respond_err(Status::InternalServerError, &e))?
         .ok_or_else(|| respond_err(Status::NotFound, "Could not find username for temp login token. \
             It may have expired or the user has not finished logging in yet."))?;
 
-    info!("Found username {} for temp login token \"{}\"", username, request_data.temp_login_token);
+    info!("Found username {} for temp login token \"{}\"", username, temp_login_token);
     let account_exists: bool = check_if_account_exists(&username).await
         .map_err(|e| respond_err(Status::InternalServerError, &e))?;
     if !account_exists {
@@ -256,22 +255,17 @@ pub async fn api_get_access_token(request_data: Json<GetAccessTokenRequest>) -> 
         respond_err(Status::InternalServerError, "Could not generate access token!")
     })?;
     let generated_token: String = base64::prelude::BASE64_URL_SAFE.encode(buf);
-
+    
     let acorn_token = AcornAccessToken {
         token: generated_token.clone(),
         username: username.clone(),
-        device_info: request_data.device_info.clone(),
         created_at: Utc::now(),
     };
-
-   insert_access_token(&acorn_token).await
-       .map_err(|e| respond_err(Status::InternalServerError, &e))?;
-
+    
+    insert_access_token(&acorn_token).await.map_err(|e| respond_err(Status::InternalServerError, &e))?;
     // Success
-    info!("User {} signed in on {}", username, request_data.device_info.distro);
-    respond_ok_value(json!({
-        "access_token": generated_token,
-    }))
+    info!("User {} signed in", username);
+    respond_ok_value(json!({"access_token": generated_token}))
 }
 
 
@@ -314,11 +308,3 @@ struct TempLoginRequest {
     temp_login_token: String,
     username: String,
 }
-
-#[derive(Deserialize)]
-#[serde(crate = "rocket::serde")]
-struct GetAccessTokenRequest {
-    temp_login_token: String,
-    device_info: DeviceInfo,
-}
-
