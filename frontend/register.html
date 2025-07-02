@@ -74,7 +74,7 @@
 
     async function postTempLoginToken(tempLoginToken, username) {
         console.info("Sending request to post temp login token");
-        let response = await fetch('/api/temp_login', {
+        let response = await fetch('/api/v1/temp_login', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -144,7 +144,7 @@
             };
 
             console.info("Sending request to register");
-            let response = await fetch('/api/register', {
+            let response = await fetch('/api/v1/register', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

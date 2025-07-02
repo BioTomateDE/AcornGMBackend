@@ -24,7 +24,7 @@
         console.info(`--username (${typeof username}): ${username}`);
 
         try {
-            let resp = await fetch('/api/temp_login', {
+            let resp = await fetch('/api/v1/temp_login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -65,7 +65,7 @@
         }
 
         const query = new URLSearchParams( {discord_code: discordCode} );
-        const url = "/api/discord_auth?" + query;
+        const url = "/api/v1/discord_auth?" + query;
         console.info(`Sending discord auth request to ${url}`)
         let response;
         try {
