@@ -21,7 +21,7 @@ use rocket::serde::json::Json;
 use serde_json::json;
 use regex::Regex;
 use rocket::response::content::RawHtml;
-use crate::{respond_err, respond_ok_empty, respond_ok_value, RespType};
+use crate::{respond_err, respond_ok_empty, respond_ok_value, ApiResponse};
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
@@ -124,7 +124,7 @@ async fn get_user_info(access_token: &str) -> Result<DiscordUserInfo, String> {
 
 #[allow(private_interfaces)]
 #[post("/register", data="<request_data>")]
-pub async fn api_post_register(request_data: Json<RegisterRequest>) -> RespType {
+pub async fn api_post_register(request_data: Json<RegisterRequest>) -> ApiResponse {
     info!("Handling `POST register` with username \"{}\" and discord user id {}", request_data.username, request_data.discord_user_id);
     static USERNAME_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9_-]{3,32}$")
         .expect("Could not load username verification pattern"));
@@ -171,7 +171,7 @@ pub async fn api_post_register(request_data: Json<RegisterRequest>) -> RespType 
 
 
 #[get("/discord_auth?<discord_code>")]
-pub async fn api_get_discord_auth(discord_code: &str) -> RespType {
+pub async fn api_get_discord_auth(discord_code: &str) -> ApiResponse {
     // Get access/refresh tokens from OAuth2 code
     info!("Handling `GET discord_auth` with code \"{discord_code}\"");
     let token_response: TokenResponse = exchange_code(discord_code).await
@@ -214,7 +214,7 @@ pub async fn api_get_discord_auth(discord_code: &str) -> RespType {
 
 #[allow(private_interfaces)]
 #[post("/temp_login", data="<request_data>")]
-pub async fn api_post_temp_login(request_data: Json<TempLoginRequest>) -> RespType {
+pub async fn api_post_temp_login(request_data: Json<TempLoginRequest>) -> ApiResponse {
     info!("Handling `POST temp_login` with username {} and temp login token \"{}\"", request_data.username, request_data.temp_login_token);
 
     let already_exists: bool = insert_temp_login_token(&request_data.temp_login_token, &request_data.username).await
@@ -233,7 +233,7 @@ pub async fn api_post_temp_login(request_data: Json<TempLoginRequest>) -> RespTy
 /// post request because json in body is easier to deal with than in params
 #[allow(private_interfaces)]
 #[post("/access_token", data="<temp_login_token>")]
-pub async fn api_get_access_token(temp_login_token: &str) -> RespType {
+pub async fn api_get_access_token(temp_login_token: &str) -> ApiResponse {
     info!("Handling `GET access_token` with temp login token \"{}\"", temp_login_token);
     
     let username: String = temp_login_token_get_username(&temp_login_token).await

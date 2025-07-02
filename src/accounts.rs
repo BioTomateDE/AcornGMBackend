@@ -2,7 +2,7 @@ use chrono::{DateTime, Duration, Utc};
 use rocket::http::Status;
 use sqlx::error::DatabaseError;
 use sqlx::postgres::{PgDatabaseError, PgQueryResult};
-use crate::{pool, respond_err, respond_ok_empty, RespType};
+use crate::{pool, respond_err, respond_ok_empty, ApiResponse};
 
 
 #[derive(Debug, Clone)]
@@ -58,7 +58,7 @@ pub async fn check_if_account_exists_discord(username: &str, discord_user_id: &s
 }
 
 
-pub async fn ensure_account_authentication(username: &str, access_token: &str) -> RespType {
+pub async fn ensure_account_authentication(username: &str, access_token: &str) -> ApiResponse {
     let result: Option<bool> = sqlx::query_scalar!(
         r#"
         SELECT EXISTS (

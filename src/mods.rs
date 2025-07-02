@@ -5,7 +5,7 @@ use rocket::http::{ContentType, Status};
 use rocket_multipart_form_data::{MultipartFormData, MultipartFormDataField, MultipartFormDataOptions};
 use sqlx::QueryBuilder;
 use uuid::Uuid;
-use crate::{pool, respond_err, respond_ok_empty, RespType};
+use crate::{pool, respond_err, respond_ok_empty, ApiResponse};
 use crate::accounts::ensure_account_authentication;
 use crate::sanitize::sanitize_string;
 
@@ -14,7 +14,7 @@ const MAX_FILE_SIZE: u64 = 16 * 1024 * 1024;   // 16 MB
 
 
 #[put("/mod", data = "<data>")]
-pub async fn api_upload_mod(content_type: &ContentType, data: Data<'_>) -> RespType {
+pub async fn api_upload_mod(content_type: &ContentType, data: Data<'_>) -> ApiResponse {
     let err_400 = |e: String| respond_err(Status::BadRequest, &e);
     info!("Handling `PUT` mod");
 
@@ -93,7 +93,7 @@ pub async fn api_upload_mod(content_type: &ContentType, data: Data<'_>) -> RespT
 
 
 #[patch("/mod", data = "<data>")]
-pub async fn api_update_mod(content_type: &ContentType, data: Data<'_>) -> RespType {
+pub async fn api_update_mod(content_type: &ContentType, data: Data<'_>) -> ApiResponse {
     let err_400 = |e: String| respond_err(Status::BadRequest, &e);
     info!("Handling `PATCH` mod");
 
@@ -153,7 +153,7 @@ pub async fn api_update_mod(content_type: &ContentType, data: Data<'_>) -> RespT
 
 
 #[delete("/mod", data = "<data>")]
-pub async fn api_delete_mod(content_type: &ContentType, data: Data<'_>) -> RespType {
+pub async fn api_delete_mod(content_type: &ContentType, data: Data<'_>) -> ApiResponse {
     let err_400 = |e: String| respond_err(Status::BadRequest, &e);
     info!("Handling `DELETE` mod");
     
@@ -214,7 +214,7 @@ pub fn get_bytes_form_field_opt<'a>(form_data: &'a MultipartFormData, field_name
 }
 
 
-async fn ensure_mod_authorization(mod_id: Uuid, username: &str) -> RespType {
+async fn ensure_mod_authorization(mod_id: Uuid, username: &str) -> ApiResponse {
     let exists: bool = sqlx::query_scalar!(
         r#"
         SELECT EXISTS(

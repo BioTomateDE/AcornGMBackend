@@ -3,6 +3,7 @@ mod login;
 mod mods;
 mod search_mods;
 mod sanitize;
+mod catchers;
 
 #[macro_use]
 extern crate rocket;
@@ -22,7 +23,9 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 use rocket::http::Status;
 use rocket::serde::json::Json;
+use rocket_dyn_templates::Template;
 use serde_json::{json, Value};
+use crate::catchers::{api_catch_404, api_catch_422, api_catch_429, html_catch_404};
 use crate::mods::{api_delete_mod, api_update_mod, api_upload_mod};
 
 #[get("/")]
@@ -34,7 +37,7 @@ fn html_get_eula() -> Redirect {
     Redirect::to("eula.html")
 }
 
-type RespType = Result<Option<Json<Value>>, status::Custom<Json<Value>>>;
+type ApiResponse = Result<Option<Json<Value>>, status::Custom<Json<Value>>>;
 fn respond_err(status: Status, error_message: &str) -> status::Custom<Json<Value>> {
     status::Custom(
         status,
@@ -43,10 +46,10 @@ fn respond_err(status: Status, error_message: &str) -> status::Custom<Json<Value
         }))
     )
 }
-fn respond_ok_value(json_response: Value) -> RespType {
+fn respond_ok_value(json_response: Value) -> ApiResponse {
     Ok(Some(Json(json!(json_response))))
 }
-fn respond_ok_empty() -> RespType {
+fn respond_ok_empty() -> ApiResponse {
     Ok(None)
 }
 
@@ -76,10 +79,11 @@ async fn rocket() -> _ {
 
     info!("Starting rocket");
     rocket::build()
+        .attach(Template::fairing())
         .configure(rocket::Config::figment().merge(("port", 24187)))
         .mount("/", routes![html_get_index, html_get_eula, redirect_get_goto_discord_auth])
         .mount(
-            "/api",
+            "/api/v1",
             routes![
                 api_get_discord_auth,
                 api_post_register,
@@ -91,4 +95,7 @@ async fn rocket() -> _ {
             ],
         )
         .mount("/", FileServer::from(SERVE_DIR_PATH.clone()))
+        .register("/", catchers![html_catch_404])
+        .register("/api/v1", catchers![api_catch_404, api_catch_422, api_catch_429])
 }
+
