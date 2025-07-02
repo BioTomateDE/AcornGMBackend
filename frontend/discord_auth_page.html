@@ -10,6 +10,8 @@
 <h2>Finishing Login Process...</h2>
 <p><strong>Login Status:</strong> <span id="login-status">Waiting for script...</span></p>
 <button hidden="hidden" id="register-button" onclick="doRegister()">Register</button>
+
+<script src="http_response_codes.js"></script>
 <script type="text/javascript">
     function checkString(string) {
         return typeof string === 'string' && string.length >= 0
@@ -37,7 +39,7 @@
 
             if (!resp.ok) {
                 let json = await resp.json();
-                console.error(`Could not post temp login token; AcornGM API responded with ${resp.status} - ${resp.statusText}: ${json.error}`);
+                console.error(`Could not post temp login token; AcornGM API responded with ${resp.status} - ${HTTP_STATUS[response.status]}: ${json.error}`);
                 return false;
             }
         } catch (error) {
@@ -108,8 +110,8 @@
         }
 
         if (!response.ok) {
-            loginStatus.innerText = `Error: AcornGM Server responded with HTTP Status Code ${response.status} - ${response.statusText}: ${respJson['error']}`;
-            console.error(`AcornGM responded with HTTP ${response.status} - ${response.statusText}: ${respJson["error"]}`);
+            loginStatus.innerText = `Error: AcornGM Server responded with HTTP Status Code ${response.status} - ${HTTP_STATUS[response.status]}: ${respJson['error']}`;
+            console.error(`AcornGM responded with HTTP ${response.status} - ${HTTP_STATUS[response.status]}: ${respJson["error"]}`);
             return;
         }
 
