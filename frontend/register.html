@@ -28,22 +28,26 @@
     <input id="register-submit" type="submit" value="Register">
 </form>
 
-<script>
+<script async defer>
     // Function to get query parameters
-    const getQueryParam = param => {
+    function getQueryParam(param) {
         const urlParams = new URLSearchParams(window.location.search);
         return urlParams.get(param);
-    };
+    }
 
     // Get Discord User ID and Discord Username from query params
     const discordUserId = getQueryParam("discordUserId");
     const discordAccessToken = getQueryParam("discordAccessToken");
     const discordUsername = getQueryParam("discordUsername");
 
-    // Ensure all query params are set
     if (!discordUserId || !discordAccessToken || !discordUsername) {
-        alert("Required parameters (discordUserId, discordAccessToken, discordUsername) are missing from the URL!");
-        throw new Error("Missing query parameters");
+        document.body.innerHTML = `
+        <h1>AcornGM</h1>
+        <h2>Missing Required Parameters</h2>
+        <p>The URL is missing one or more required parameters: <strong>discordUserId, discordAccessToken, discordUsername</strong>.</p>
+        <p>The registration form cannot be loaded without these.</p>
+        <span>This should not happen if you were redirected from the Acorn login page.</span>
+    `;
     }
 
     // Display the message with Discord Username
@@ -100,7 +104,7 @@
     usernameInput.addEventListener("input", () => {
         const usernameValue = usernameInput.value;
 
-        if (!isValidUsername(usernameValue) && usernameValue !== "") {
+        if (!isValidUsername(usernameValue) && usernameValue.length >= 3) {
             // Show the error message and input border red
             usernameError.style.display = "block";
             usernameInput.style.outline = "2px solid red";
