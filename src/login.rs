@@ -270,7 +270,7 @@ pub async fn api_get_access_token(temp_login_token: &str) -> ApiResponse {
 
 
 #[get("/goto_discord_auth?<temp_login_token>")]
-pub async fn redirect_get_goto_discord_auth(temp_login_token: String) -> RawHtml<String> {
+pub async fn redirect_goto_discord_auth(temp_login_token: String) -> RawHtml<String> {
     const DISCORD_AUTH_URL: &'static str = "https://discord.com/oauth2/authorize\
         ?client_id=1360325253766578479\
         &response_type=code\

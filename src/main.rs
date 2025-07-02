@@ -13,7 +13,7 @@ use crate::login::api_get_access_token;
 use crate::login::api_get_discord_auth;
 use crate::login::api_post_register;
 use crate::login::api_post_temp_login;
-use crate::login::redirect_get_goto_discord_auth;
+use crate::login::redirect_goto_discord_auth;
 use log::{error, info};
 use rocket::fs::FileServer;
 use rocket::response::{status, Redirect};
@@ -29,11 +29,11 @@ use crate::catchers::{api_catch_404, api_catch_422, api_catch_429, html_catch_40
 use crate::mods::{api_delete_mod, api_update_mod, api_upload_mod};
 
 #[get("/")]
-fn html_get_index() -> Redirect {
+fn html_index() -> Redirect {
     Redirect::to("index.html")
 }
 #[get("/eula")]
-fn html_get_eula() -> Redirect {
+fn html_eula() -> Redirect {
     Redirect::to("eula.html")
 }
 
@@ -81,7 +81,9 @@ async fn rocket() -> _ {
     rocket::build()
         .attach(Template::fairing())
         .configure(rocket::Config::figment().merge(("port", 24187)))
-        .mount("/", routes![html_get_index, html_get_eula, redirect_get_goto_discord_auth])
+        .register("/api/v1", catchers![api_catch_404, api_catch_422, api_catch_429])
+        .register("/", catchers![html_catch_404])
+        .mount("/", routes![html_index, html_eula, redirect_goto_discord_auth])
         .mount(
             "/api/v1",
             routes![
@@ -95,7 +97,5 @@ async fn rocket() -> _ {
             ],
         )
         .mount("/", FileServer::from(SERVE_DIR_PATH.clone()))
-        .register("/", catchers![html_catch_404])
-        .register("/api/v1", catchers![api_catch_404, api_catch_422, api_catch_429])
 }
 
