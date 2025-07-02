@@ -164,7 +164,7 @@
                 console.info(`Raw response: ${text}`);
                 let resp = JSON.parse(text);
                 console.error(`Registration failed; AcornGM API responded with ${response.status} - ${HTTP_STATUS[response.status]}: ${resp['error']}`);
-                alert(`Registration failed; AcornGM API responded with ${response.status} - ${HTTP_STATUS[response.status]}: ${resp['error']}`);
+                alert(`(${response.status} - ${HTTP_STATUS[response.status]})\n${resp['error']}`);
                 submitButton.enabled = true;
                 return;
             }
